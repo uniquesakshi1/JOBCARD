@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Job Card / Route Card - Mobile App (PWA)</title>
+  
+  <link rel="manifest" href="manifest.json">
+  
+  <style>
+    /* ------------------- STYLES (Same as before) ------------------- */
+    body { font-family: Arial, sans-serif; margin: 12px; background:#f5f5f5; font-size: 14px; }
+    .container { display: flex; gap: 12px; min-height: 85vh; }
+    .panel { background: white; padding: 12px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+    .form { width: 36%; max-width:420px; overflow-y:auto; height:85vh; flex-shrink: 0; }
+    .preview-wrap { width: 64%; display:flex; flex-direction:column; gap:8px; align-items:center; flex-grow: 1; min-width: 300px; }
+    .preview { width:100%; max-width:210mm; height: auto; min-height: 297mm; background:white; box-shadow:0 2px 8px rgba(0,0,0,.12); padding:12mm; box-sizing:border-box; overflow-x: auto; font-size: 12px; }
+    h2 { text-align:center; margin:0 0 8px 0; font-size:18px; }
+    label { display:block; font-size:13px; margin-top:8px; }
+    input[type="text"], input[type="date"], select { width:100%; padding:6px 8px; margin-top:4px; box-sizing:border-box; border: 1px solid #ccc; border-radius: 4px; }
+    .top-grid { display:flex; gap:8px; }
+    .top-grid > div { flex:1; }
+    .actions { display:flex; gap:8px; margin-top:8px; }
+    button { padding:8px 10px; border: none; background:#2563eb; color:white; border-radius:6px; cursor:pointer; font-size: 14px;}
+    button.secondary { background:#6b7280; }
+    button.delete-btn { background:#dc2626; } 
+    button.pdf-btn { background:#f97316; }
+    button.print-btn { background:#059669; }
+    button:disabled { background:#9ca3af; cursor: not-allowed; }
+    .note { font-size:12px; color:#666; margin-top:8px; }
+    table { width:100%; border-collapse: collapse; table-layout: auto; }
+    table th, table td { border:1px solid #444; padding:6px; text-align:left; vertical-align:top; line-height: 1.3; }
+    .rows-input { max-height:300px; overflow-y:auto; margin-top:8px; border:1px solid #ddd; padding:6px; border-radius:6px; background: #fcfcfc; }
+    .row-group { border: 1px solid #eee; padding: 8px; margin-bottom: 10px; border-radius: 4px; background: #fff; }
+    .row-header { font-weight: bold; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 4px; border-radius: 4px; }
+    .row-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .observation-fields { border-top: 1px dashed #ddd; padding-top: 8px; margin-top: 8px; }
+    .report-search-section { border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; }
+    .search-area { display: flex; gap: 8px; margin-bottom: 8px; }
+    .report-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; }
+    .report-item { padding: 6px 8px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; font-size: 13px; }
+    .report-item.selected { background: #dbeafe; font-weight: bold; border-left: 5px solid #2563eb; padding-left: 3px; }
+    .report-item:hover { background: #f0f0f0; }
+    .report-actions-bottom { display: flex; gap: 8px; margin-top: 10px; justify-content: space-between; }
+    @media (max-width: 900px) {
+        .container { flex-direction: column; }
+        .form { width: 100%; max-width: none; height: auto; order: 1; }
+        .preview-wrap { width: 100%; order: 2; align-items: stretch; }
+        .preview { min-height: 200px; padding: 5px; box-shadow: none; overflow-x: auto; }
+        .preview table { min-width: 750px; }
+    }
+    @media print {
+        body * { visibility: hidden; }
+        .preview, .preview * { visibility: visible; }
+        .preview { position: absolute; left:0; top:0; box-shadow:none; width: 210mm; height: 297mm; padding: 12mm; margin: 0; overflow: hidden; }
+        .preview table { width: 100%; min-width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px; flex-wrap: wrap;">
+    <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Local PWA System</h1>
+    <div class="actions" style="width: auto; align-items: center; flex-wrap: wrap;">
+      <span id="currentReportId" style="font-size:14px; color:#666; margin-right: 15px;">Active ID: -- New --</span>
+      <button id="downloadPdfBtn" class="pdf-btn">⬇️ Download PDF</button>
+      <button id="printBtn" class="print-btn">🖨️ Print Job Card</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="panel form">
+      
+      <div class="report-search-section">
+        <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Reports Folder (Local Save)</h2>
+        
+        <div class="search-area">
+          <input id="reportSearch" type="text" placeholder="Challan / Batch No. से खोजें" />
+          <button id="searchBtn">🔍</button>
+        </div>
+        
+        <div id="reportListContainer" class="report-list-container">
+          <div style="padding:10px; text-align:center;">Loading reports from Local Storage...</div>
+        </div>
+        
+        <div class="report-actions-bottom">
+          <button id="newReportBtn" class="secondary" style="background:#10b981;">➕ New Job Card</button>
+          <button id="saveReport">💾 Save / Update</button>
+          <button id="deleteReport" class="delete-btn" disabled>🗑️ Delete</button>
+        </div>
+        <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Batch No/Part Desc/Challan No से Save होगी।</div>
+        <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ यह डेटा केवल इसी मोबाइल में सेव रहेगा।</div>
+      </div>
+      
+      <h2 style="margin-top:20px;">General Information</h2>
+      <label>Customer Name
+        <input id="customerName" type="text" placeholder="Customer name" value="Star Engineering" />
+      </label>
+      <div class="top-grid">
+        <div><label>Order/Challan Qty<input id="orderQty" type="text" placeholder="Qty" value="1000 Pcs" /></label></div>
+        <div><label>Challan No/Date<input id="challan" type="text" placeholder="No / Date" value="CH/2508/01 | 01.09.2025" /></label></div>
+      </div>
+      <label>Part Desc / No<input id="partDesc" type="text" placeholder="Part description or no" value="LAC09170" /></label>
+      <div class="top-grid">
+        <div><label>Coating Spec (e.g. 2B, 1T)</label><input id="coatingSpec" type="text" placeholder="e.g. 1B,2B,1T" value="1 Base | 2 Top"/></div>
+        <div>
+          <label>Paint
+            <select id="paint"><option value="Silver" selected>Silver</option><option value="Black">Black</option><option value="Other">Other</option></select>
+            <button id="updateOpsBtn" style="width:100%; margin-top:5px; padding: 8px;">Update Operations</button>
+          </label>
+        </div>
+      </div>
+      <label>Batch No<input id="batchNo" type="text" placeholder="Batch number" value="250819" /></label>
+      <h2 style="margin-top:20px;">Operation Details (Input Fields)</h2>
+      <div class="rows-input"><div id="rowsInput"></div></div>
+      <div class="note">हर ऑपरेशन के नीचे **Observation** फील्ड्स में अलग-अलग वैल्यू भरें।</div>
+      <h2 style="margin-top:20px;">Signatures & Notes</h2>
+      <label>Verified By<input id="verifiedBy" type="text" placeholder="Verified by" value="SAKSHI CHAVHAN" /></label>
+      <label>Approved By<input id="approvedBy" type="text" placeholder="Approved by" value="ABHIJEET DHOKRAT" /></label>
+      <label>Notes<input id="notes" type="text" placeholder="Notes / Remark" value="Job Card initiated with Batch 250819. Coating system used: Silver." /></label>
+      <div class="actions">
+        <button id="applyBtn">Apply to Preview</button>
+        <button id="clearBtn" class="secondary">Clear Form</button>
+      </div>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="panel" style="width:100%; padding:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="small">ISO 9001:2015</div>
+          <div class="small">Format No: WT/PDR/11</div>
+        </div>
+      </div>
+      <div id="preview" class="preview panel">
+        <h2>JOB CARD / ROUTE CARD</h2>
+        <table style="margin-bottom:8px; table-layout: auto;">
+          <tr><td style="width:18%">Customer Name</td><td id="pvCustomer" style="width:32%"></td><td style="width:18%">Order/Challan Qty</td><td id="pvQty" style="width:32%"></td></tr>
+          <tr><td>Customer Challan No/Date</td><td id="pvChallan"></td><td>Part Desc/No</td><td><span id="pvPart"></span></td></tr>
+          <tr><td>Coating Spec</td><td id="pvCoating"></td><td>Paint</td><td id="pvPaint"></td></tr>
+          <tr><td>Batch No</td><td id="pvBatch"></td><td></td><td></td></tr>
+        </table>
+        <table id="pvTable">
+          <thead>
+            <tr><th style="width:4%">Sr</th><th style="width:10%">Date/Shift</th><th style="width:15%">Operation</th><th style="width:17%">Observation</th><th style="width:8%">From Time</th><th style="width:8%">To Time</th><th style="width:7%">Qty</th><th style="width:10%">Inspection OK/NOK</th><th style="width:21%">Operator / Checked / Supervisor</th></tr>
+          </thead>
+          <tbody id="pvRows"></tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <div>Verified By: <span id="pvVerified"></span></div>
+          <div>Approved By: <span id="pvApproved"></span></div>
+        </div>
+        <div style="margin-top:6px;">Notes: <span id="pvNotes"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+  <script>
+    const LOCAL_STORAGE_KEY = 'jobCardReports'; 
+    let currentActiveReportId = null; 
+    const jobFields = ['customerName','orderQty','challan','partDesc','coatingSpec','paint','batchNo','verifiedBy','approvedBy','notes'];
+    
+    // --- JOB CARD CONSTANTS (Operations - Same as before) ---
+    const RANGES = {
+        POINTAGE: "Paintage (45-65 gms/lit)",
+        DRYING: "Temp (140-160 °C), Time (10-15 min)",
+        SHOT_BLASTING: "Cycle time (15-20 min)",
+        FINAL_CHECK: "Thickness (range), Visual Check",
+        PACKING_CHECK: "Qty (value), Match Check",
+    };
+
+    const PARAMETERS = {
+        "Incoming Inspection": { labels: ["Challan QTY/Part Match"], units: [""] },
+        "Alkaline Cleaning": { labels: ["Paintage"], units: ["gms/lit"] }, 
+        "Drying": { labels: ["Temp", "Time"], units: ["°C", "min"] }, 
+        "Shot Blasting": { labels: ["Cycle time"], units: ["min"] },
+        "Base Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
+        "Top Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
+        "Top Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
+        "Final Inspection": { labels: ["Thickness", "Visual Check"], units: [""] },
+        "Packing & Dispatch": { labels: ["Qty", "Match"], units: [""] },
+        "Spare Operation": { labels: ["N/A"], units: [""] },
+        "Base Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
+    };
+
+    const BASE_OPERATIONS = [
+      { op: "Incoming Inspection", guide: RANGES.FINAL_CHECK, color: 'N/A' },
+      { op: "Alkaline Cleaning", guide: RANGES.POINTAGE, color: 'N/A' },
+      { op: "Drying", guide: RANGES.DRYING, color: 'N/A' },
+      { op: "Shot Blasting", guide: RANGES.SHOT_BLASTING, color: 'N/A' },
+      { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+      { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+      { op: "Top Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+      { op: "Final Inspection", guide: RANGES.FINAL_CHECK, color: 'N/A' },
+      { op: "Packing & Dispatch", guide: RANGES.PACKING_CHECK, color: 'N/A' }
+    ];
+    
+    // --- LOCAL STORAGE LOGIC ---
+    function getAllReports() {
+        const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+        return data ? JSON.parse(data) : [];
+    }
+
+    function setAllReports(reports) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(reports));
+    }
+    // --- END LOCAL STORAGE LOGIC ---
+
+    // --- Helper Functions (Same as before) ---
+    function getCurrentPredefinedOperations() {
+        const paintType = document.getElementById('paint').value;
+        const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS)); 
+        
+        if (paintType === 'Black') {
+            document.getElementById('coatingSpec').value = "2 Base | 2 Top";
+            ops.splice(5, 0, { op: "Base Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' });
+        } else if (paintType === 'Silver') {
+             document.getElementById('coatingSpec').value = "1 Base | 2 Top";
+        } else {
+             document.getElementById('coatingSpec').value = "Custom/Other";
+        }
+
+        while (ops.length < 10) { ops.push({ op: "Spare Operation", guide: "N/A", color: 'N/A' }); }
+        
+        return ops.slice(0, 10);
+    }
+
+    function updateRowInputs(savedRows = []) {
+        const predefinedOperations = getCurrentPredefinedOperations();
+        const rowsInputContainer = document.getElementById('rowsInput');
+        rowsInputContainer.innerHTML = ''; 
+        
+        const mapSavedData = (rows) => {
+            const dataMap = {};
+            rows.forEach(r => {
+                const opParams = PARAMETERS[r.operation] || { labels: [], units: [] };
+                // Ensure observation is a string before splitting
+                const values = (r.observation || '').split(',').map(v => v.trim()); 
+                const obsValues = {};
+                opParams.labels.forEach((label, j) => {
+                    const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
+                    obsValues[inputName] = values[j] || '';
+                });
+                dataMap[r.operation] = { ...r, obsValues };
+            });
+            return dataMap;
+        };
+
+        const savedDataMap = mapSavedData(savedRows);
+        
+        predefinedOperations.forEach((opConfig, index) => {
+            const srCount = index + 1;
+            const opName = opConfig.op;
+            const opParams = PARAMETERS[opName];
+            const savedData = savedDataMap[opName] || { obsValues: {} };
+            
+            const div = document.createElement('div');
+            div.dataset.sr = srCount;
+            div.dataset.operation = opName;
+            div.className = 'row-group';
+            
+            let obsFieldsHTML = '';
+            
+            opParams.labels.forEach((label, j) => {
+                if (label !== "N/A") {
+                    const unit = opParams.units[j];
+                    const inputName = label.replace(/[^a-zA-Z0-9]/g, ''); 
+                    const placeholder = `${label} ${unit ? '(' + unit + ')' : ''}`;
+                    const savedValue = savedData.obsValues[inputName] || '';
+                    
+                    obsFieldsHTML += `
+                        <div>
+                            <label>${placeholder}</label>
+                            <input data-param="${inputName}" type="text" placeholder="${placeholder}" value="${savedValue}" />
+                        </div>
+                    `;
+                }
+            });
+            
+            div.innerHTML = `
+                <div class="row-header">
+                    <span>${srCount}. ${opName}</span>
+                    <span>Date: 
+                        <input data-field="dateShift" type="text" placeholder="Date/Shift" value="${savedData.dateShift || ''}" style="width:100px; display:inline-block; margin-top:0;" />
+                    </span>
+                </div>
+                
+                <div class="row-detail-grid">
+                    <div><label>From Time</label><input data-field="fromTime" type="text" placeholder="From T." value="${savedData.fromTime || ''}" /></div>
+                    <div><label>To Time</label><input data-field="toTime" type="text" placeholder="To T." value="${savedData.toTime || ''}" /></div>
+                    <div><label>Qty (Pcs)</label><input data-field="qty" type="text" placeholder="Qty" value="${savedData.qty || ''}" /></div>
+                </div>
+
+                <div class="observation-fields row-detail-grid">
+                    ${obsFieldsHTML}
+                </div>
+            `;
+
+            div.querySelectorAll('input').forEach(inp => {
+                inp.addEventListener('change', applyPreview);
+            });
+            
+            rowsInputContainer.appendChild(div);
+        });
+        
+        applyPreview(); 
+    }
+
+    function getFormData() {
+      const data = {};
+      jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
+      
+      // Generate a unique ID based on key fields (Cleaned for key compatibility)
+      const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
+      const cleanPart = data.partDesc.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
+      const cleanBatch = data.batchNo.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
+      
+      data.uniqueId = `${cleanBatch}_${cleanPart}_${cleanChallan}`;
+      data.uniqueId = data.uniqueId.toUpperCase();
+      
+      const rows = [];
+      document.getElementById('rowsInput').querySelectorAll('.row-group').forEach((group, index)=>{
+        const operation = group.dataset.operation || '';
+        const opParams = PARAMETERS[operation];
+        
+        let observationValues = [];
+        
+        opParams.labels.forEach((label) => {
+            if (label !== "N/A") {
+                const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
+                const inputElement = group.querySelector(`input[data-param="${inputName}"]`);
+                observationValues.push(inputElement?.value.trim() || '');
+            }
+        });
+        
+        const observation = observationValues.join(', ').trim(); 
+
+        if (operation.includes('Spare Operation') && observation.replace(/, /g, '').length === 0 && group.querySelector('input[data-field="dateShift"]').value.trim() === '') return;
+
+        rows.push({
+          sr: index + 1,
+          dateShift: group.querySelector('input[data-field="dateShift"]').value.trim(),
+          observation: observation, 
+          paramStructure: opParams, 
+          fromTime: group.querySelector('input[data-field="fromTime"]').value.trim(),
+          toTime: group.querySelector('input[data-field="toTime"]').value.trim(),
+          qty: group.querySelector('input[data-field="qty"]').value.trim(),
+          operation: operation, 
+        });
+      });
+      data.rows = rows;
+      
+      return data;
+    }
+
+    function applyPreview() {
+      const data = getFormData();
+      const v = (id) => document.getElementById(id).value;
+      
+      document.getElementById('pvCustomer').textContent = v('customerName');
+      document.getElementById('pvQty').textContent = v('orderQty');
+      document.getElementById('pvChallan').textContent = v('challan');
+      document.getElementById('pvPart').textContent = v('partDesc');
+      document.getElementById('pvCoating').textContent = v('coatingSpec');
+      document.getElementById('pvPaint').textContent = v('paint');
+      document.getElementById('pvBatch').textContent = v('batchNo');
+      document.getElementById('pvVerified').textContent = v('verifiedBy');
+      document.getElementById('pvApproved').textContent = v('approvedBy');
+      document.getElementById('pvNotes').textContent = v('notes');
+
+      const tbody = document.getElementById('pvRows');
+      tbody.innerHTML = '';
+      
+      const allRows = data.rows;
+      let globalSr = 1; 
+
+      allRows.forEach(r => {
+        const values = (r.observation || '').split(',').map(v => v.trim()); 
+        const structure = PARAMETERS[r.operation]; 
+        
+        let filteredDetails = [];
+        for (let j = 0; j < structure.labels.length; j++) {
+            const label = structure.labels[j];
+            const unit = structure.units[j];
+            const value = values[j] || ''; 
+            
+            if (label !== "N/A") {
+                const display = `<b>${label}:</b> ${value} ${unit}`;
+                filteredDetails.push({ display, label, value });
+            }
+        }
+        
+        const rowspanCount = Math.max(filteredDetails.length, 1);
+        
+        for (let index = 0; index < rowspanCount; index++) {
+            const tr = document.createElement('tr');
+            let rowContent = '';
+            
+            const detail = filteredDetails[index] || { display: '', label: '', value: '' };
+
+            if (index === 0) {
+                rowContent += `
+                    <td style="text-align:center" rowspan="${rowspanCount}">${globalSr}</td>
+                    <td rowspan="${rowspanCount}">${r.dateShift || ''}</td>
+                    <td rowspan="${rowspanCount}">${r.operation || ''}</td>
+                `;
+                globalSr++;
+            }
+            
+            const displayFromTime = index === 0 ? (r.fromTime || '') : '';
+            const displayToTime = index === 0 ? (r.toTime || '') : '';
+            const displayQty = index === 0 ? (r.qty || '') : '';
+
+            let finalDisplay = detail.display;
+            if (finalDisplay.endsWith('<b>:</b> ')) { finalDisplay = finalDisplay.substring(0, finalDisplay.length - 8); }
+
+            rowContent += `
+                <td>${finalDisplay || ''}</td>
+                <td style="text-align:center">${displayFromTime}</td>
+                <td style="text-align:center">${displayToTime}</td>
+                <td style="text-align:center">${displayQty}</td>
+                <td></td>
+                <td></td>
+            `;
+
+            tr.innerHTML = rowContent;
+            tbody.appendChild(tr);
+        }
+      });
+      
+      let currentOutputRows = tbody.querySelectorAll('tr').length;
+      const MIN_OUTPUT_ROWS = 10; 
+      
+      if (currentOutputRows < MIN_OUTPUT_ROWS) {
+        for (let i = 0; i < MIN_OUTPUT_ROWS - currentOutputRows; i++) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
+          tbody.appendChild(tr);
+        }
+      }
+    }
+
+    function updateActionButtons(id = null) {
+        currentActiveReportId = id;
+        document.getElementById('deleteReport').disabled = !id; 
+        document.getElementById('currentReportId').textContent = `Active ID: ${id || '-- New --'}`;
+        document.getElementById('saveReport').textContent = currentActiveReportId ? '💾 Update Report' : '💾 Save New Report';
+    }
+
+    function clearForm() {
+        jobFields.forEach(f => {
+            const el = document.getElementById(f);
+            if (el) el.value = el.defaultValue || ''; 
+        });
+        document.getElementById('paint').value = 'Silver';
+        updateRowInputs(); 
+        updateActionButtons(null); 
+        applyPreview();
+        document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
+    }
+
+    document.getElementById('saveReport').addEventListener('click', () => {
+        const data = getFormData();
+        const docId = data.uniqueId;
+
+        if (!data.batchNo || !data.partDesc || !data.challan || docId.length < 5) {
+             alert("❌ Save Error: Batch No, Part Desc, and Challan No. fields must be filled to create a unique ID.");
+             return;
+        }
+
+        let reports = getAllReports();
+        const timestamp = new Date().toISOString();
+        const existingIndex = reports.findIndex(r => r.uniqueId === docId);
+
+        if (existingIndex !== -1) {
+            // Update
+            data.createdAt = reports[existingIndex].createdAt;
+            data.updatedAt = timestamp;
+            reports[existingIndex] = data;
+            alert(`✅ Job Card ${docId} UPDATED in Local Storage.`);
+        } else {
+            // New Report
+            data.createdAt = timestamp;
+            data.updatedAt = timestamp;
+            reports.push(data);
+            alert(`✅ New Job Card SAVED in Local Storage. ID: ${docId}`);
+        }
+        
+        setAllReports(reports);
+        currentActiveReportId = docId;
+        updateActionButtons(docId); 
+        fetchAndDisplayReports(''); 
+    });
+
+    document.getElementById('deleteReport').addEventListener('click', () => {
+        const idToDelete = currentActiveReportId;
+        
+        if (!idToDelete) { alert("Cannot delete: Please select a saved report first."); return; }
+
+        const confirmDelete = confirm(`⚠️ Are you sure you want to DELETE Job Card ${idToDelete} permanently?`);
+        
+        if (confirmDelete) {
+            let reports = getAllReports();
+            const initialLength = reports.length;
+            
+            // ID के आधार पर रिपोर्ट हटाएँ
+            reports = reports.filter(r => r.uniqueId !== idToDelete);
+            
+            if (reports.length < initialLength) {
+                setAllReports(reports);
+                alert(`🗑️ Job Card ${idToDelete} हटा दिया गया।`);
+                clearForm(); 
+                fetchAndDisplayReports(''); 
+            } else {
+                 alert(`❌ Report ID ${idToDelete} लोकल स्टोरेज में नहीं मिला।`);
+            }
+        }
+    });
+
+    function fetchAndDisplayReports(query = '') {
+        const reportListContainer = document.getElementById('reportListContainer');
+        reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#2563eb;">Loading...</div>`;
+
+        let allReportsArray = getAllReports();
+
+        if (allReportsArray.length === 0) {
+            reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#999;">कोई सेव्ड रिपोर्ट नहीं है।</div>`;
+            return;
+        }
+
+        // Sorting (Updated date के अनुसार)
+        allReportsArray.sort((a, b) => {
+            return new Date(b.updatedAt) - new Date(a.updatedAt);
+        });
+
+        reportListContainer.innerHTML = '';
+        
+        allReportsArray.forEach(r => {
+            const displayText = `${r.challan || 'N/A Challan'} | ${r.partDesc || 'N/A Part'} | Batch: ${r.batchNo || 'N/A'}`;
+            const searchString = `${r.challan} ${r.batchNo} ${r.customerName} ${r.partDesc} ${r.uniqueId}`.toLowerCase();
+
+            if (query && !searchString.toLowerCase().includes(query.toLowerCase())) {
+                return; 
+            }
+            
+            const dateText = new Date(r.updatedAt).toLocaleDateString('en-GB') || 'Unknown Date';
+
+            const div = document.createElement('div');
+            div.className = 'report-item';
+            if(r.uniqueId === currentActiveReportId) div.classList.add('selected'); 
+            div.dataset.id = r.uniqueId; 
+            div.innerHTML = `<span class="part-info">${displayText}</span><small style="color:#888;">${dateText}</small>`;
+            
+            div.addEventListener('click', loadReport); 
+            reportListContainer.appendChild(div);
+        });
+    }
+
+    function loadReport(e) {
+        const id = e.currentTarget.dataset.id;
+        const reports = getAllReports();
+        const reportData = reports.find(r => r.uniqueId === id);
+
+        if (!reportData) { 
+            alert(`❌ Report ID ${id} लोकल स्टोरेज में नहीं मिला।`); 
+            return; 
+        }
+        
+        document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
+        e.currentTarget.classList.add('selected');
+        
+        jobFields.forEach(f => {
+            const el = document.getElementById(f);
+            if (el) el.value = reportData[f] || '';
+        });
+
+        updateActionButtons(id); 
+        
+        updateRowInputs(reportData.rows || []); 
+        applyPreview(); 
+    }
+    
+    // --- PDF / PRINT LOGIC (Same as before) ---
+    document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
+        applyPreview(); 
+        const previewEl = document.getElementById('preview');
+        
+        const canvas = await html2canvas(previewEl, {
+            scale: 2, 
+            useCORS: true 
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        let position = 0;
+        
+        if (imgHeight > pdfHeight) {
+            let heightLeft = imgHeight;
+            let page = 1;
+            
+            while (heightLeft > 0) {
+                if (page > 1) {
+                    pdf.addPage();
+                    position = - (pdfHeight * (page - 1));
+                }
+                
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+                page++;
+            }
+        } else {
+             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+        }
+
+        const fileName = `JobCard_${document.getElementById('challan').value.replace(/[^a-zA-Z0-9]/g, '_')}_${document.getElementById('batchNo').value}.pdf`;
+        pdf.save(fileName);
+    });
+
+    document.getElementById('printBtn').addEventListener('click', () => {
+        applyPreview(); 
+        window.print();
+    });
+
+    // --- EVENT LISTENERS (Same as before) ---
+
+    document.getElementById('applyBtn').addEventListener('click', applyPreview);
+    document.getElementById('updateOpsBtn').addEventListener('click', updateRowInputs);
+    document.getElementById('paint').addEventListener('change', updateRowInputs); 
+    document.getElementById('clearBtn').addEventListener('click', clearForm);
+    document.getElementById('newReportBtn').addEventListener('click', clearForm);
+
+    jobFields.forEach(id => document.getElementById(id).addEventListener('change', applyPreview));
+    
+    document.getElementById('searchBtn').addEventListener('click', () => {
+         const query = document.getElementById('reportSearch').value;
+         fetchAndDisplayReports(query);
+    });
+    
+    document.getElementById('reportSearch').addEventListener('input', (e) => {
+        const query = e.target.value;
+        fetchAndDisplayReports(query); 
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateRowInputs(); 
+        clearForm(); 
+        fetchAndDisplayReports(''); 
+
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // आपको manifest.json और service-worker.js फ़ाइलें बनानी होंगी
+                navigator.serviceWorker.register('./service-worker.js')
+                .then(registration => {
+                    console.log('PWA ServiceWorker registered');
+                })
+                .catch(registrationError => {
+                    console.log('PWA ServiceWorker registration failed:', registrationError);
+                });
+            });
+        }
+    });
+
+  </script>
+</body>
+</html>
