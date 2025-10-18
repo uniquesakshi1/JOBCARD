@@ -43,7 +43,6 @@
     .report-item:hover { background: #f0f0f0; }
     .report-actions-bottom { display: flex; gap: 8px; margin-top: 10px; justify-content: space-between; }
     .full-width-grid { grid-template-columns: 1fr; } 
-    /* NEW: Grid for Operator/Supervisor in input form */
     .operator-supervisor-grid { 
         display: grid; 
         grid-template-columns: 1fr 1fr; 
@@ -187,22 +186,21 @@
         "Drying": { labels: ["Temp", "Time"], units: ["°C", "min"] }, 
         "Shot Blasting": { labels: ["Cycle time"], units: ["min"] },
         "Base Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
+        "Base Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
         "Top Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
         "Top Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
         "Final Inspection": { labels: ["Thickness", "Visual Check"], units: [""] },
         "Packing & Dispatch": { labels: ["Qty", "Match"], units: [""] },
         "Spare Operation": { labels: ["N/A"], units: [""] },
-        "Base Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing"], units: ["sec", "°C", ""], isCoating: true },
     };
-
+    
+    // Base permanent operations
     const BASE_OPERATIONS = [
       { op: "Incoming Inspection", guide: RANGES.FINAL_CHECK, color: 'N/A' },
       { op: "Alkaline Cleaning", guide: RANGES.POINTAGE, color: 'N/A' },
       { op: "Drying", guide: RANGES.DRYING, color: 'N/A' },
       { op: "Shot Blasting", guide: RANGES.SHOT_BLASTING, color: 'N/A' },
-      { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
-      { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
-      { op: "Top Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+      // Coating steps will be inserted here based on paint type
       { op: "Final Inspection", guide: RANGES.FINAL_CHECK, color: 'N/A' },
       { op: "Packing & Dispatch", guide: RANGES.PACKING_CHECK, color: 'N/A' }
     ];
@@ -225,21 +223,60 @@
 
     // --- Helper Functions ---
     function getCurrentPredefinedOperations() {
-        const paintType = document.getElementById('paint').value;
+        const paintSelect = document.getElementById('paint');
+        const paintType = paintSelect.value;
         const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS)); 
-        
+        const coatingSteps = [];
+
+        // **सुधार यहाँ किया गया है:** अब यह 'Black' के लिए 4 कोटिंग स्टेप्स जोड़ता है।
         if (paintType === 'Black') {
+            // ✅ Black: 2 Base, 2 Top
             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
-            ops.splice(5, 0, { op: "Base Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' });
+            coatingSteps.push(
+                { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Base Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Top Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' }
+            );
         } else if (paintType === 'Silver') {
-             document.getElementById('coatingSpec').value = "1 Base | 2 Top";
+             // ✅ Silver: 2 Base, 1 Top
+             document.getElementById('coatingSpec').value = "2 Base | 1 Top";
+             coatingSteps.push(
+                { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+                { op: "Base Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
+                { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' }
+            );
         } else {
-             document.getElementById('coatingSpec').value = "Custom/Other";
+             // Other: 1 Base, 1 Top (Default)
+             document.getElementById('coatingSpec').value = "Custom/Other (1B, 1T)";
+             coatingSteps.push(
+                { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Other' },
+                { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Other' }
+            );
         }
 
-        while (ops.length < 10) { ops.push({ op: "Spare Operation", guide: "N/A", color: 'N/A' }); }
+        // Coating Steps को Final Inspection से पहले डालें
+        const finalInspectionIndex = ops.findIndex(op => op.op === 'Final Inspection');
+        ops.splice(finalInspectionIndex, 0, ...coatingSteps);
         
-        return ops.slice(0, 10);
+        // --- मेन लॉजिक: ऑपरेशन की संख्या तय करना ---
+        // Black: 4 (Permanent) + 4 (Coats) + 2 (End) = 10
+        // Silver: 4 (Permanent) + 3 (Coats) + 2 (End) = 9
+        // Other: 4 (Permanent) + 2 (Coats) + 2 (End) = 8
+        
+        const requiredLength = (paintType === 'Black') ? 10 : (paintType === 'Silver' ? 9 : 8); 
+        
+        // Spare Operations हटा दें, अगर संख्या ज़्यादा है
+        if (ops.length > requiredLength) {
+            return ops.slice(0, requiredLength);
+        }
+        
+        // Spare Operations जोड़ें, अगर संख्या कम है
+        while (ops.length < requiredLength) { 
+            ops.push({ op: "Spare Operation", guide: "N/A", color: 'N/A' }); 
+        }
+        
+        return ops; 
     }
 
     function updateRowInputs(savedRows = []) {
@@ -249,6 +286,7 @@
         
         const mapSavedData = (rows) => {
             const dataMap = {};
+            // Map saved data using the operation name as key
             rows.forEach(r => {
                 const opParams = PARAMETERS[r.operation] || { labels: [], units: [] };
                 const values = (r.observation || '').split(',').map(v => v.trim()); 
@@ -262,7 +300,7 @@
                     obsValues, 
                     inspectionStatus: r.inspectionStatus || 'N/A',
                     operatorChecked: r.operatorChecked || '', 
-                    supervisorSign: r.supervisorSign || '' // NEW: Supervisor Sign
+                    supervisorSign: r.supervisorSign || ''
                 }; 
             });
             return dataMap;
@@ -275,6 +313,7 @@
             const opName = opConfig.op;
             const opParams = PARAMETERS[opName];
             
+            // Get saved data for this specific operation name
             const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: '' };
             
             const div = document.createElement('div');
@@ -284,6 +323,7 @@
             
             let obsFieldsHTML = '';
             
+            // Observation Fields Generate करें (Grid 1)
             opParams.labels.forEach((label, j) => {
                 if (label !== "N/A") {
                     const unit = opParams.units[j];
@@ -300,6 +340,7 @@
                 }
             });
             
+            // HTML Structure
             div.innerHTML = `
                 <div class="row-header">
                     <span>${srCount}. ${opName}</span>
@@ -391,7 +432,7 @@
           qty: group.querySelector('input[data-field="qty"]').value.trim(),
           inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
           operatorChecked: group.querySelector('input[data-field="operatorChecked"]').value.trim(),
-          supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), // NEW: Supervisor Sign
+          supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), 
           operation: operation, 
         });
       });
@@ -459,7 +500,7 @@
             const displayQty = index === 0 ? (r.qty || '') : '';
             const displayInspection = index === 0 ? (r.inspectionStatus || '') : ''; 
             const displayOperatorChecked = index === 0 ? (r.operatorChecked || '') : ''; 
-            const displaySupervisorSign = index === 0 ? (r.supervisorSign || '') : ''; // NEW: Supervisor Sign
+            const displaySupervisorSign = index === 0 ? (r.supervisorSign || '') : ''; 
             
             let finalDisplay = detail.display;
             if (finalDisplay.endsWith('<b>:</b> ')) { finalDisplay = finalDisplay.substring(0, finalDisplay.length - 8); }
@@ -480,12 +521,14 @@
       });
       
       let currentOutputRows = tbody.querySelectorAll('tr').length;
-      const MIN_OUTPUT_ROWS = 10; 
+      const MIN_OUTPUT_ROWS = 10; // न्यूनतम 10 लाइनें दिखाने के लिए
       
+      // खाली लाइनें जोड़ना
       if (currentOutputRows < MIN_OUTPUT_ROWS) {
         for (let i = 0; i < MIN_OUTPUT_ROWS - currentOutputRows; i++) {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; // Added one empty TD for Supervisor Sign
+          // ध्यान दें: अगर ब्लैक में 10 लाइनें हैं तो यहाँ कोई खाली रो नहीं आएगी
+          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
           tbody.appendChild(tr);
         }
       }
@@ -504,10 +547,14 @@
             if (el.type === 'text' || el.tagName === 'INPUT') {
                  el.value = el.defaultValue || ''; 
             } else if (el.tagName === 'SELECT') {
-                 el.value = el.options[0].value; 
+                 // केवल paint select को छोड़कर बाकी को default पर रीसेट करें
+                 if(f !== 'paint') el.value = el.options[0].value; 
             }
         });
-        document.getElementById('paint').value = 'Silver';
+        
+        // फॉर्म clear होने पर भी paint को Silver पर सेट करना
+        document.getElementById('paint').value = 'Silver'; 
+        
         updateRowInputs(); 
         updateActionButtons(null); 
         applyPreview();
@@ -588,7 +635,6 @@
         
         allReportsArray.forEach(r => {
             const displayText = `${r.customerName || 'N/A Cust'} | ${r.partDesc || 'N/A Part'} | Challan: ${r.challan || 'N/A'}`;
-            // Search string updated to include Customer Name
             const searchString = `${r.challan} ${r.batchNo} ${r.customerName} ${r.partDesc} ${r.uniqueId}`.toLowerCase();
 
             if (query && !searchString.toLowerCase().includes(query.toLowerCase())) {
@@ -698,22 +744,24 @@
         const query = e.target.value;
         fetchAndDisplayReports(query); 
     });
+    
+    // Paint select पर इवेंट लिसनर ताकि मान बदलने पर तुरंत ऑपरेशन्स अपडेट हों
+    document.getElementById('paint').addEventListener('change', () => {
+        // paint बदलने पर भी operations को अपडेट कर देना चाहिए
+        updateRowInputs(); 
+    });
+
 
     document.addEventListener('DOMContentLoaded', () => {
         updateRowInputs(); 
-        clearForm(); 
+        // clearForm() को हटा दिया गया है ताकि Silver default पर लोड हो, 
+        // लेकिन यह सुनिश्चित किया गया है कि updateRowInputs() DOMContentLoaded पर चले।
         fetchAndDisplayReports(''); 
 
-        // PWA Service Worker Registration
+        // PWA Service Worker Registration (Ignore if not needed for your setup)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
-                .then(registration => {
-                    console.log('PWA ServiceWorker registered');
-                })
-                .catch(registrationError => {
-                    console.log('PWA ServiceWorker registration failed:', registrationError);
-                });
+                // service-worker.js file is needed for this to work as PWA.
             });
         }
     });
