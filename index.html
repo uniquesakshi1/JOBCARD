@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json">
   
   <style>
-    /* ------------------- STYLES (Same as before) ------------------- */
+    /* ------------------- STYLES ------------------- */
     body { font-family: Arial, sans-serif; margin: 12px; background:#f5f5f5; font-size: 14px; }
     .container { display: flex; gap: 12px; min-height: 85vh; }
     .panel { background: white; padding: 12px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
@@ -42,6 +42,16 @@
     .report-item.selected { background: #dbeafe; font-weight: bold; border-left: 5px solid #2563eb; padding-left: 3px; }
     .report-item:hover { background: #f0f0f0; }
     .report-actions-bottom { display: flex; gap: 8px; margin-top: 10px; justify-content: space-between; }
+    .full-width-grid { grid-template-columns: 1fr; } 
+    /* NEW: Grid for Operator/Supervisor in input form */
+    .operator-supervisor-grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 6px; 
+        border-top: 1px dashed #ddd; 
+        padding-top: 8px; 
+        margin-top: 8px; 
+    }
     @media (max-width: 900px) {
         .container { flex-direction: column; }
         .form { width: 100%; max-width: none; height: auto; order: 1; }
@@ -53,7 +63,7 @@
         body * { visibility: hidden; }
         .preview, .preview * { visibility: visible; }
         .preview { position: absolute; left:0; top:0; box-shadow:none; width: 210mm; height: 297mm; padding: 12mm; margin: 0; overflow: hidden; }
-        .preview table { width: 100%; min-width: auto; }
+        .preview table { min-width: auto; }
     }
   </style>
 </head>
@@ -74,7 +84,7 @@
         <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Reports Folder (Local Save)</h2>
         
         <div class="search-area">
-          <input id="reportSearch" type="text" placeholder="Challan / Batch No. से खोजें" />
+          <input id="reportSearch" type="text" placeholder="Challan / Part / Customer से खोजें" />
           <button id="searchBtn">🔍</button>
         </div>
         
@@ -87,7 +97,7 @@
           <button id="saveReport">💾 Save / Update</button>
           <button id="deleteReport" class="delete-btn" disabled>🗑️ Delete</button>
         </div>
-        <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Batch No/Part Desc/Challan No से Save होगी।</div>
+        <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Customer/Part/Challan No से Save होगी।</div>
         <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ यह डेटा केवल इसी मोबाइल में सेव रहेगा।</div>
       </div>
       
@@ -140,7 +150,7 @@
         </table>
         <table id="pvTable">
           <thead>
-            <tr><th style="width:4%">Sr</th><th style="width:10%">Date/Shift</th><th style="width:15%">Operation</th><th style="width:17%">Observation</th><th style="width:8%">From Time</th><th style="width:8%">To Time</th><th style="width:7%">Qty</th><th style="width:10%">Inspection OK/NOK</th><th style="width:21%">Operator / Checked / Supervisor</th></tr>
+            <tr><th style="width:4%">Sr</th><th style="width:10%">Date/Shift</th><th style="width:15%">Operation</th><th style="width:17%">Observation</th><th style="width:8%">From Time</th><th style="width:8%">To Time</th><th style="width:7%">Qty</th><th style="width:10%">Inspection OK/NOK</th><th style="width:10%">Operator/Checked</th><th style="width:11%">Supervisor Sign</th></tr>
           </thead>
           <tbody id="pvRows"></tbody>
         </table>
@@ -162,7 +172,7 @@
     let currentActiveReportId = null; 
     const jobFields = ['customerName','orderQty','challan','partDesc','coatingSpec','paint','batchNo','verifiedBy','approvedBy','notes'];
     
-    // --- JOB CARD CONSTANTS (Operations - Same as before) ---
+    // --- JOB CARD CONSTANTS (Operations) ---
     const RANGES = {
         POINTAGE: "Paintage (45-65 gms/lit)",
         DRYING: "Temp (140-160 °C), Time (10-15 min)",
@@ -200,7 +210,12 @@
     // --- LOCAL STORAGE LOGIC ---
     function getAllReports() {
         const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
+        try {
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.error("Error parsing Local Storage data:", e);
+            return [];
+        }
     }
 
     function setAllReports(reports) {
@@ -208,7 +223,7 @@
     }
     // --- END LOCAL STORAGE LOGIC ---
 
-    // --- Helper Functions (Same as before) ---
+    // --- Helper Functions ---
     function getCurrentPredefinedOperations() {
         const paintType = document.getElementById('paint').value;
         const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS)); 
@@ -236,14 +251,19 @@
             const dataMap = {};
             rows.forEach(r => {
                 const opParams = PARAMETERS[r.operation] || { labels: [], units: [] };
-                // Ensure observation is a string before splitting
                 const values = (r.observation || '').split(',').map(v => v.trim()); 
                 const obsValues = {};
                 opParams.labels.forEach((label, j) => {
                     const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
                     obsValues[inputName] = values[j] || '';
                 });
-                dataMap[r.operation] = { ...r, obsValues };
+                dataMap[r.operation] = { 
+                    ...r, 
+                    obsValues, 
+                    inspectionStatus: r.inspectionStatus || 'N/A',
+                    operatorChecked: r.operatorChecked || '', 
+                    supervisorSign: r.supervisorSign || '' // NEW: Supervisor Sign
+                }; 
             });
             return dataMap;
         };
@@ -254,7 +274,8 @@
             const srCount = index + 1;
             const opName = opConfig.op;
             const opParams = PARAMETERS[opName];
-            const savedData = savedDataMap[opName] || { obsValues: {} };
+            
+            const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: '' };
             
             const div = document.createElement('div');
             div.dataset.sr = srCount;
@@ -273,7 +294,7 @@
                     obsFieldsHTML += `
                         <div>
                             <label>${placeholder}</label>
-                            <input data-param="${inputName}" type="text" placeholder="${placeholder}" value="${savedValue}" />
+                            <input data-field="obsParam" data-param="${inputName}" type="text" placeholder="${placeholder}" value="${savedValue}" />
                         </div>
                     `;
                 }
@@ -291,15 +312,35 @@
                     <div><label>From Time</label><input data-field="fromTime" type="text" placeholder="From T." value="${savedData.fromTime || ''}" /></div>
                     <div><label>To Time</label><input data-field="toTime" type="text" placeholder="To T." value="${savedData.toTime || ''}" /></div>
                     <div><label>Qty (Pcs)</label><input data-field="qty" type="text" placeholder="Qty" value="${savedData.qty || ''}" /></div>
+                    <div>
+                        <label>Inspection OK/NOK</label>
+                        <select data-field="inspectionStatus">
+                            <option value="N/A" ${savedData.inspectionStatus === 'N/A' ? 'selected' : ''}>N/A</option>
+                            <option value="OK" ${savedData.inspectionStatus === 'OK' ? 'selected' : ''}>OK</option>
+                            <option value="NOK" ${savedData.inspectionStatus === 'NOK' ? 'selected' : ''}>NOK</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="observation-fields row-detail-grid">
+                <div class="observation-fields row-detail-grid ${opParams.labels.length <= 1 ? 'full-width-grid' : ''}">
                     ${obsFieldsHTML}
+                </div>
+                
+                <div class="operator-supervisor-grid">
+                    <div>
+                        <label>Operator / Checked</label>
+                        <input data-field="operatorChecked" type="text" placeholder="Name / Sign" value="${savedData.operatorChecked || ''}" />
+                    </div>
+                    <div>
+                        <label>Supervisor Sign/Name</label>
+                        <input data-field="supervisorSign" type="text" placeholder="Name / Sign" value="${savedData.supervisorSign || ''}" />
+                    </div>
                 </div>
             `;
 
-            div.querySelectorAll('input').forEach(inp => {
+            div.querySelectorAll('input, select').forEach(inp => { 
                 inp.addEventListener('change', applyPreview);
+                inp.addEventListener('input', applyPreview); 
             });
             
             rowsInputContainer.appendChild(div);
@@ -312,12 +353,12 @@
       const data = {};
       jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
       
-      // Generate a unique ID based on key fields (Cleaned for key compatibility)
-      const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
+      // FIX: Unique ID based on Customer Name, Part Desc, and Challan
+      const cleanCustomer = data.customerName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanPart = data.partDesc.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
-      const cleanBatch = data.batchNo.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
+      const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       
-      data.uniqueId = `${cleanBatch}_${cleanPart}_${cleanChallan}`;
+      data.uniqueId = `${cleanCustomer.substring(0, 3)}_${cleanPart}_${cleanChallan}`;
       data.uniqueId = data.uniqueId.toUpperCase();
       
       const rows = [];
@@ -330,23 +371,27 @@
         opParams.labels.forEach((label) => {
             if (label !== "N/A") {
                 const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
-                const inputElement = group.querySelector(`input[data-param="${inputName}"]`);
+                const inputElement = group.querySelector(`input[data-field="obsParam"][data-param="${inputName}"]`);
                 observationValues.push(inputElement?.value.trim() || '');
             }
         });
         
         const observation = observationValues.join(', ').trim(); 
 
-        if (operation.includes('Spare Operation') && observation.replace(/, /g, '').length === 0 && group.querySelector('input[data-field="dateShift"]').value.trim() === '') return;
-
+        const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
+        if (operation.includes('Spare Operation') && observation.replace(/, /g, '').length === 0 && dateShiftValue === '') return;
+        
         rows.push({
           sr: index + 1,
-          dateShift: group.querySelector('input[data-field="dateShift"]').value.trim(),
+          dateShift: dateShiftValue,
           observation: observation, 
           paramStructure: opParams, 
           fromTime: group.querySelector('input[data-field="fromTime"]').value.trim(),
           toTime: group.querySelector('input[data-field="toTime"]').value.trim(),
           qty: group.querySelector('input[data-field="qty"]').value.trim(),
+          inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
+          operatorChecked: group.querySelector('input[data-field="operatorChecked"]').value.trim(),
+          supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), // NEW: Supervisor Sign
           operation: operation, 
         });
       });
@@ -386,7 +431,7 @@
             const unit = structure.units[j];
             const value = values[j] || ''; 
             
-            if (label !== "N/A") {
+            if (label !== "N/A" && (label.trim().length > 0 || value.trim().length > 0)) {
                 const display = `<b>${label}:</b> ${value} ${unit}`;
                 filteredDetails.push({ display, label, value });
             }
@@ -412,7 +457,10 @@
             const displayFromTime = index === 0 ? (r.fromTime || '') : '';
             const displayToTime = index === 0 ? (r.toTime || '') : '';
             const displayQty = index === 0 ? (r.qty || '') : '';
-
+            const displayInspection = index === 0 ? (r.inspectionStatus || '') : ''; 
+            const displayOperatorChecked = index === 0 ? (r.operatorChecked || '') : ''; 
+            const displaySupervisorSign = index === 0 ? (r.supervisorSign || '') : ''; // NEW: Supervisor Sign
+            
             let finalDisplay = detail.display;
             if (finalDisplay.endsWith('<b>:</b> ')) { finalDisplay = finalDisplay.substring(0, finalDisplay.length - 8); }
 
@@ -421,8 +469,9 @@
                 <td style="text-align:center">${displayFromTime}</td>
                 <td style="text-align:center">${displayToTime}</td>
                 <td style="text-align:center">${displayQty}</td>
-                <td></td>
-                <td></td>
+                <td style="text-align:center; font-weight: bold;">${displayInspection}</td> 
+                <td>${displayOperatorChecked}</td>
+                <td>${displaySupervisorSign}</td>
             `;
 
             tr.innerHTML = rowContent;
@@ -436,7 +485,7 @@
       if (currentOutputRows < MIN_OUTPUT_ROWS) {
         for (let i = 0; i < MIN_OUTPUT_ROWS - currentOutputRows; i++) {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
+          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; // Added one empty TD for Supervisor Sign
           tbody.appendChild(tr);
         }
       }
@@ -452,7 +501,11 @@
     function clearForm() {
         jobFields.forEach(f => {
             const el = document.getElementById(f);
-            if (el) el.value = el.defaultValue || ''; 
+            if (el.type === 'text' || el.tagName === 'INPUT') {
+                 el.value = el.defaultValue || ''; 
+            } else if (el.tagName === 'SELECT') {
+                 el.value = el.options[0].value; 
+            }
         });
         document.getElementById('paint').value = 'Silver';
         updateRowInputs(); 
@@ -465,8 +518,8 @@
         const data = getFormData();
         const docId = data.uniqueId;
 
-        if (!data.batchNo || !data.partDesc || !data.challan || docId.length < 5) {
-             alert("❌ Save Error: Batch No, Part Desc, and Challan No. fields must be filled to create a unique ID.");
+        if (!data.customerName || !data.partDesc || !data.challan || docId.length < 5) {
+             alert("❌ Save Error: Customer Name, Part Desc, and Challan No. fields must be filled to create a unique ID.");
              return;
         }
 
@@ -475,13 +528,11 @@
         const existingIndex = reports.findIndex(r => r.uniqueId === docId);
 
         if (existingIndex !== -1) {
-            // Update
             data.createdAt = reports[existingIndex].createdAt;
             data.updatedAt = timestamp;
             reports[existingIndex] = data;
             alert(`✅ Job Card ${docId} UPDATED in Local Storage.`);
         } else {
-            // New Report
             data.createdAt = timestamp;
             data.updatedAt = timestamp;
             reports.push(data);
@@ -505,7 +556,6 @@
             let reports = getAllReports();
             const initialLength = reports.length;
             
-            // ID के आधार पर रिपोर्ट हटाएँ
             reports = reports.filter(r => r.uniqueId !== idToDelete);
             
             if (reports.length < initialLength) {
@@ -530,7 +580,6 @@
             return;
         }
 
-        // Sorting (Updated date के अनुसार)
         allReportsArray.sort((a, b) => {
             return new Date(b.updatedAt) - new Date(a.updatedAt);
         });
@@ -538,7 +587,8 @@
         reportListContainer.innerHTML = '';
         
         allReportsArray.forEach(r => {
-            const displayText = `${r.challan || 'N/A Challan'} | ${r.partDesc || 'N/A Part'} | Batch: ${r.batchNo || 'N/A'}`;
+            const displayText = `${r.customerName || 'N/A Cust'} | ${r.partDesc || 'N/A Part'} | Challan: ${r.challan || 'N/A'}`;
+            // Search string updated to include Customer Name
             const searchString = `${r.challan} ${r.batchNo} ${r.customerName} ${r.partDesc} ${r.uniqueId}`.toLowerCase();
 
             if (query && !searchString.toLowerCase().includes(query.toLowerCase())) {
@@ -582,7 +632,7 @@
         applyPreview(); 
     }
     
-    // --- PDF / PRINT LOGIC (Same as before) ---
+    // --- PDF / PRINT LOGIC ---
     document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
         applyPreview(); 
         const previewEl = document.getElementById('preview');
@@ -630,21 +680,20 @@
         window.print();
     });
 
-    // --- EVENT LISTENERS (Same as before) ---
+    // --- EVENT LISTENERS ---
 
     document.getElementById('applyBtn').addEventListener('click', applyPreview);
     document.getElementById('updateOpsBtn').addEventListener('click', updateRowInputs);
-    document.getElementById('paint').addEventListener('change', updateRowInputs); 
     document.getElementById('clearBtn').addEventListener('click', clearForm);
     document.getElementById('newReportBtn').addEventListener('click', clearForm);
 
     jobFields.forEach(id => document.getElementById(id).addEventListener('change', applyPreview));
-    
+
     document.getElementById('searchBtn').addEventListener('click', () => {
          const query = document.getElementById('reportSearch').value;
          fetchAndDisplayReports(query);
     });
-    
+
     document.getElementById('reportSearch').addEventListener('input', (e) => {
         const query = e.target.value;
         fetchAndDisplayReports(query); 
@@ -658,7 +707,6 @@
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // आपको manifest.json और service-worker.js फ़ाइलें बनानी होंगी
                 navigator.serviceWorker.register('./service-worker.js')
                 .then(registration => {
                     console.log('PWA ServiceWorker registered');
@@ -669,7 +717,6 @@
             });
         }
     });
-
   </script>
 </body>
 </html>
