@@ -8,9 +8,11 @@
   <link rel="manifest" href="manifest.json">
   
   <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
-        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js';
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js';
+        // 🔴🔴🔴🔴🔴 ये तीन लाइनें बदलें 🔴🔴🔴🔴🔴
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        // 🔴🔴🔴🔴🔴 11.6.1 वर्जन इस्तेमाल करें 🔴🔴🔴🔴🔴
         
         // --- FIREBASE CONFIGURATION (YOUR UPDATED KEYS) ---
         // These keys should match the project where you enabled Authentication and Firestore.
@@ -65,7 +67,9 @@
             const record = {
                 ...data, // Spread all form data
                 timestamp: new Date().toISOString(),
-                savedBy: window.auth.currentUser.email
+                savedBy: window.auth.currentUser.email,
+                // Add a field to help with sorting and identifying the last update time
+                updatedAt: new Date().toISOString(), 
             };
              await setDoc(doc(window.db, 'job_cards', docId), record); 
         };
@@ -75,8 +79,13 @@
             const q = collection(window.db, 'job_cards');
             const querySnapshot = await getDocs(q);
             
+            // 🔴 FIX: In the old version, doc.data() sometimes caused issues.
+            // Ensure we map the ID correctly
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
+                // We add the actual document ID from Firestore to the data object
+                data.uniqueId = doc.id; 
+                
                 const searchString = `${data.challan} ${data.batchNo} ${data.customerName} ${data.partDesc} ${data.uniqueId}`.toLowerCase();
                 if (!query || searchString.includes(query.toLowerCase())) {
                     reports.push(data);
@@ -629,13 +638,18 @@
             }
 
             allReportsArray.sort((a, b) => {
-                return new Date(b.updatedAt || b.timestamp) - new Date(a.updatedAt || a.timestamp);
+                // Use updatedAt or fallback to timestamp for sorting
+                const dateA = new Date(a.updatedAt || a.timestamp).getTime();
+                const dateB = new Date(b.updatedAt || b.timestamp).getTime();
+                return dateB - dateA; // Sort descending (newest first)
             });
+
 
             reportListContainer.innerHTML = '';
             
             allReportsArray.forEach(r => {
                 const displayText = `${r.customerName || 'N/A Cust'} | ${r.partDesc || 'N/A Part'} | Challan: ${r.challan || 'N/A'}`;
+                // Fallback to timestamp if updatedAt is missing
                 const dateText = new Date(r.updatedAt || r.timestamp).toLocaleDateString('en-GB') || 'Unknown Date';
 
                 const div = document.createElement('div');
@@ -643,6 +657,9 @@
                 if(r.uniqueId === currentActiveReportId) div.classList.add('selected'); 
                 div.dataset.id = r.uniqueId; 
                 div.innerHTML = `<span class="part-info">${displayText}</span><small style="color:#888;">${dateText}</small>`;
+                
+                // Attach the full report data to the element for quick access during loadReport
+                div.reportData = r; 
                 
                 div.addEventListener('click', loadReport); 
                 reportListContainer.appendChild(div);
@@ -675,12 +692,10 @@
 
     function loadReport(e) {
         const id = e.currentTarget.dataset.id;
-        const reports = Array.from(document.getElementById('reportListContainer').children)
-                             .map(el => el.reportData)
-                             .filter(d => d);
-        const reportData = reports.find(r => r.uniqueId === id);
-
+        const reportData = e.currentTarget.reportData; // Get data directly from the element
+        
         if (!reportData) { 
+            // This should not happen if data was attached, but is a safe fallback
             alert(`❌ Report ID ${id} लिस्ट में नहीं मिला।`); 
             return; 
         }
