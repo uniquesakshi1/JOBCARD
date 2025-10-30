@@ -3,12 +3,96 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Job Card / Route Card - Mobile App (PWA)</title>
+  <title>Job Card / Route Card - Cloud App (PWA)</title>
   
   <link rel="manifest" href="manifest.json">
   
+  <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js';
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js';
+        
+        // --- FIREBASE CONFIGURATION (YOUR NEW KEYS) ---
+        // Warning: Replace these with your actual keys from Firebase Console
+        const firebaseConfig = {
+            apiKey: "AIzaSyAaQoa6pSF7ZEPne6BYT8V7l6OslHPTYjw",
+            authDomain: "jobcard-app-7b99c.firebaseapp.com",
+            projectId: "jobcard-app-7b99c",
+            storageBucket: "jobcard-app-7b99c.firebasestorage.app",
+            messagingSenderId: "36117182109",
+            appId: "1:36117182109:web:3007d2193063100d3c4674"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.auth = getAuth(app); 
+        
+        // --- AUTHENTICATION FUNCTIONS ---
+        window.handleAuthAction = async (actionType) => {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            if (actionType !== 'logout' && (!email || !password)) {
+                alert("कृपया ईमेल और पासवर्ड डालें।");
+                return;
+            }
+
+            try {
+                if (actionType === 'signup') {
+                    await createUserWithEmailAndPassword(window.auth, email, password);
+                    alert(`✅ Signed Up and Logged In as ${email}.`);
+                } else if (actionType === 'signin') {
+                    await signInWithEmailAndPassword(window.auth, email, password);
+                    alert(`✅ Signed In as ${email}.`);
+                } else if (actionType === 'logout') {
+                    await signOut(window.auth);
+                    alert("👋 Logged Out successfully!");
+                }
+            } catch (error) {
+                alert(`❌ Auth Failed: ${error.message}`);
+            }
+        };
+
+        // Auth Listener to update UI status (defined in the main script block below)
+        onAuthStateChanged(window.auth, (user) => {
+            if (window.updateAuthUI) {
+                window.updateAuthUI(user);
+            }
+        });
+        
+        // Expose Firebase functions to the main script
+        window.cloudSaveReport = async (data, docId) => {
+            const record = {
+                ...data, // Spread all form data
+                timestamp: new Date().toISOString(),
+                savedBy: window.auth.currentUser.email
+            };
+             await setDoc(doc(window.db, 'job_cards', docId), record); 
+        };
+        
+        window.cloudLoadReports = async (query = '') => {
+            const reports = [];
+            const q = collection(window.db, 'job_cards');
+            const querySnapshot = await getDocs(q);
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const searchString = `${data.challan} ${data.batchNo} ${data.customerName} ${data.partDesc} ${data.uniqueId}`.toLowerCase();
+                if (!query || searchString.includes(query.toLowerCase())) {
+                    reports.push(data);
+                }
+            });
+            return reports;
+        };
+
+        window.cloudDeleteReport = async (docId) => {
+            await deleteDoc(doc(window.db, 'job_cards', docId));
+        };
+        
+    </script>
+    
   <style>
-    /* ------------------- STYLES ------------------- */
+    /* ------------------- STYLES (Your Original Styles) ------------------- */
     body { font-family: Arial, sans-serif; margin: 12px; background:#f5f5f5; font-size: 14px; }
     .container { display: flex; gap: 12px; min-height: 85vh; }
     .panel { background: white; padding: 12px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
@@ -51,12 +135,33 @@
         padding-top: 8px; 
         margin-top: 8px; 
     }
+    /* New: Login Bar Styles (Minimal intrusion) */
+    .auth-bar {
+        background-color: #f0f8ff;
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .auth-bar input { padding: 4px 6px; border: 1px solid #999; border-radius: 3px; margin-right: 5px; width: 140px; }
+    .auth-bar button { padding: 4px 8px; margin-left: 5px; cursor: pointer; border: none; border-radius: 3px; font-weight: bold; font-size: 13px; }
+    .auth-status-text { font-weight: bold; margin-right: 10px; font-size: 14px; }
+    .auth-controls { display: flex; align-items: center; flex-wrap: wrap; }
+    
     @media (max-width: 900px) {
         .container { flex-direction: column; }
         .form { width: 100%; max-width: none; height: auto; order: 1; }
         .preview-wrap { width: 100%; order: 2; align-items: stretch; }
         .preview { min-height: 200px; padding: 5px; box-shadow: none; overflow-x: auto; }
         .preview table { min-width: 750px; }
+        .auth-bar { flex-direction: column; align-items: stretch; }
+        .auth-controls { justify-content: center; margin-top: 8px; }
+        .auth-bar input { width: calc(50% - 10px); margin: 5px; }
+        .auth-bar button { width: auto; margin: 5px; }
     }
     @media print {
         body * { visibility: hidden; }
@@ -67,8 +172,23 @@
   </style>
 </head>
 <body>
+    
+  <div class="auth-bar">
+    <div id="loggedOutUI" class="auth-controls">
+        <span class="auth-status-text" id="authStatus" style="color: #dc2626;">Status: Logged Out (Cloud Disabled)</span>
+        <input type="email" id="loginEmail" placeholder="Email" value="test@jobcard.com">
+        <input type="password" id="loginPassword" placeholder="Password" value="password123">
+        <button id="loginButton" style="background-color: #3f51b5; color: white;">Sign In</button>
+        <button id="signUpButton" style="background-color: #059669; color: white;">Sign Up</button>
+    </div>
+    
+    <div id="loggedInUI" class="auth-controls" style="display: none;">
+        <span class="auth-status-text" id="userEmailDisplay" style="color: #059669;"></span>
+        <button id="logoutButton" style="background-color: #f97316; color: white;">Log Out</button>
+    </div>
+  </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px; flex-wrap: wrap;">
-    <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Local PWA System</h1>
+    <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Cloud PWA System</h1>
     <div class="actions" style="width: auto; align-items: center; flex-wrap: wrap;">
       <span id="currentReportId" style="font-size:14px; color:#666; margin-right: 15px;">Active ID: -- New --</span>
       <button id="downloadPdfBtn" class="pdf-btn">⬇️ Download PDF</button>
@@ -80,24 +200,24 @@
     <div class="panel form">
       
       <div class="report-search-section">
-        <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Reports Folder (Local Save)</h2>
+        <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Reports Folder (Cloud Save)</h2>
         
         <div class="search-area">
           <input id="reportSearch" type="text" placeholder="Challan / Part / Customer से खोजें" />
-          <button id="searchBtn">🔍</button>
+          <button id="searchBtn" disabled>🔍</button>
         </div>
         
         <div id="reportListContainer" class="report-list-container">
-          <div style="padding:10px; text-align:center;">Loading reports from Local Storage...</div>
+          <div style="padding:10px; text-align:center;">Login is required to load reports from Cloud.</div>
         </div>
         
         <div class="report-actions-bottom">
           <button id="newReportBtn" class="secondary" style="background:#10b981;">➕ New Job Card</button>
-          <button id="saveReport">💾 Save / Update</button>
+          <button id="saveReport" disabled>💾 Save New Report</button>
           <button id="deleteReport" class="delete-btn" disabled>🗑️ Delete</button>
         </div>
         <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Customer/Part/Challan No से Save होगी।</div>
-        <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ यह डेटा केवल इसी मोबाइल में सेव रहेगा।</div>
+        <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ यह डेटा क्लाउड (Firebase) पर सेव होगा।</div>
       </div>
       
       <h2 style="margin-top:20px;">General Information</h2>
@@ -110,10 +230,13 @@
       </div>
       <label>Part Desc / No<input id="partDesc" type="text" placeholder="Part description or no" value="LAC09170" /></label>
       <div class="top-grid">
-        <div><label>Coating Spec (e.g. 2B, 1T)</label><input id="coatingSpec" type="text" placeholder="e.g. 1B,2B,1T" value="1 Base | 2 Top"/></div>
+        <div><label>Coating Spec (e.g. 2B, 1T)</label><input id="coatingSpec" type="text" placeholder="e.g. 1B,2B,1T" value="2 Base | 2 Top"/></div>
         <div>
           <label>Paint
-            <select id="paint"><option value="Silver" selected>Silver</option><option value="Black">Black</option><option value="Other">Other</option></select>
+            <select id="paint">
+                <option value="Silver">Silver</option>
+                <option value="Black" selected>Black</option>
+            </select>
             <button id="updateOpsBtn" style="width:100%; margin-top:5px; padding: 8px;">Update Operations</button>
           </label>
         </div>
@@ -125,7 +248,7 @@
       <h2 style="margin-top:20px;">Signatures & Notes</h2>
       <label>Verified By<input id="verifiedBy" type="text" placeholder="Verified by" value="SAKSHI CHAVHAN" /></label>
       <label>Approved By<input id="approvedBy" type="text" placeholder="Approved by" value="ABHIJEET DHOKRAT" /></label>
-      <label>Notes<input id="notes" type="text" placeholder="Notes / Remark" value="Job Card initiated with Batch 250819. Coating system used: Silver." /></label>
+      <label>Notes<input id="notes" type="text" placeholder="Notes / Remark" value="Job Card initiated with Batch 250819. Coating system used: Black." /></label>
       <div class="actions">
         <button id="applyBtn">Apply to Preview</button>
         <button id="clearBtn" class="secondary">Clear Form</button>
@@ -167,7 +290,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 
   <script>
-    const LOCAL_STORAGE_KEY = 'jobCardReports'; 
     let currentActiveReportId = null; 
     const jobFields = ['customerName','orderQty','challan','partDesc','coatingSpec','paint','batchNo','verifiedBy','approvedBy','notes'];
     
@@ -205,32 +327,50 @@
       { op: "Packing & Dispatch", guide: RANGES.PACKING_CHECK, color: 'N/A' }
     ];
     
-    // --- LOCAL STORAGE LOGIC ---
-    function getAllReports() {
-        const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-        try {
-            return data ? JSON.parse(data) : [];
-        } catch (e) {
-            console.error("Error parsing Local Storage data:", e);
-            return [];
+    // --- AUTH UI HANDLER (Connects to Firebase in module block) ---
+    window.updateAuthUI = (user) => {
+        const loggedInUI = document.getElementById('loggedInUI');
+        const loggedOutUI = document.getElementById('loggedOutUI');
+        const authStatus = document.getElementById('authStatus');
+        const userEmailDisplay = document.getElementById('userEmailDisplay');
+        const saveButton = document.getElementById('saveReport');
+        const searchButton = document.getElementById('searchBtn');
+        const deleteButton = document.getElementById('deleteReport');
+        
+        if (user) {
+            // Logged In: Enable Cloud features
+            loggedOutUI.style.display = 'none';
+            loggedInUI.style.display = 'flex';
+            userEmailDisplay.textContent = `Logged in as: ${user.email}`;
+            authStatus.textContent = "Status: Logged In (Cloud Active)";
+            authStatus.style.color = '#059669';
+            saveButton.disabled = false;
+            searchButton.disabled = false;
+            fetchAndDisplayReports(''); // Load reports when logged in
+        } else {
+            // Logged Out: Disable Cloud features
+            loggedOutUI.style.display = 'flex';
+            loggedInUI.style.display = 'none';
+            authStatus.textContent = "Status: Logged Out (Cloud Disabled)";
+            authStatus.style.color = '#dc2626';
+            saveButton.disabled = true;
+            searchButton.disabled = true;
+            deleteButton.disabled = true;
+            document.getElementById('reportListContainer').innerHTML = `<div style="padding:10px; text-align:center;">Login is required to load reports from Cloud.</div>`;
+            updateActionButtons(null);
         }
-    }
+    };
 
-    function setAllReports(reports) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(reports));
-    }
-    // --- END LOCAL STORAGE LOGIC ---
-
-    // --- Helper Functions ---
+    // --- Core Logic Functions ---
     function getCurrentPredefinedOperations() {
         const paintSelect = document.getElementById('paint');
         const paintType = paintSelect.value;
         const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS)); 
         const coatingSteps = [];
 
-        // **सुधार यहाँ किया गया है:** अब यह 'Black' के लिए 4 कोटिंग स्टेप्स जोड़ता है।
+        // --- FIXED: Color Logic (Only Black and Silver) ---
         if (paintType === 'Black') {
-            // ✅ Black: 2 Base, 2 Top
+            // Black: 2 Base, 2 Top (4 coats, 10 operations total)
             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
             coatingSteps.push(
                 { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
@@ -239,7 +379,7 @@
                 { op: "Top Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' }
             );
         } else if (paintType === 'Silver') {
-             // ✅ Silver: 2 Base, 1 Top
+             // Silver: 2 Base, 1 Top (3 coats, 9 operations total)
              document.getElementById('coatingSpec').value = "2 Base | 1 Top";
              coatingSteps.push(
                 { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' },
@@ -247,31 +387,29 @@
                 { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Silver' }
             );
         } else {
-             // Other: 1 Base, 1 Top (Default)
-             document.getElementById('coatingSpec').value = "Custom/Other (1B, 1T)";
+             // Default/Other: Black settings as default if somehow another value sneaks in
+             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
              coatingSteps.push(
-                { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Other' },
-                { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Other' }
+                { op: "Base Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Base Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Top Coat -1 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' },
+                { op: "Top Coat -2 & Curing", guide: "Viscosity/Temp/Curing", color: 'Black' }
             );
         }
 
-        // Coating Steps को Final Inspection से पहले डालें
         const finalInspectionIndex = ops.findIndex(op => op.op === 'Final Inspection');
         ops.splice(finalInspectionIndex, 0, ...coatingSteps);
         
-        // --- मेन लॉजिक: ऑपरेशन की संख्या तय करना ---
-        // Black: 4 (Permanent) + 4 (Coats) + 2 (End) = 10
-        // Silver: 4 (Permanent) + 3 (Coats) + 2 (End) = 9
-        // Other: 4 (Permanent) + 2 (Coats) + 2 (End) = 8
+        // Final length check (Spare Operations logic)
+        let requiredLength = (paintType === 'Silver') ? 9 : 10;
         
-        const requiredLength = (paintType === 'Black') ? 10 : (paintType === 'Silver' ? 9 : 8); 
-        
-        // Spare Operations हटा दें, अगर संख्या ज़्यादा है
-        if (ops.length > requiredLength) {
-            return ops.slice(0, requiredLength);
+        const initialCount = ops.length;
+        if (initialCount > requiredLength) {
+            while(ops.length > requiredLength && ops[ops.length - 1].op === "Spare Operation") {
+                ops.pop();
+            }
         }
         
-        // Spare Operations जोड़ें, अगर संख्या कम है
         while (ops.length < requiredLength) { 
             ops.push({ op: "Spare Operation", guide: "N/A", color: 'N/A' }); 
         }
@@ -286,7 +424,6 @@
         
         const mapSavedData = (rows) => {
             const dataMap = {};
-            // Map saved data using the operation name as key
             rows.forEach(r => {
                 const opParams = PARAMETERS[r.operation] || { labels: [], units: [] };
                 const values = (r.observation || '').split(',').map(v => v.trim()); 
@@ -313,7 +450,6 @@
             const opName = opConfig.op;
             const opParams = PARAMETERS[opName];
             
-            // Get saved data for this specific operation name
             const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: '' };
             
             const div = document.createElement('div');
@@ -323,7 +459,6 @@
             
             let obsFieldsHTML = '';
             
-            // Observation Fields Generate करें (Grid 1)
             opParams.labels.forEach((label, j) => {
                 if (label !== "N/A") {
                     const unit = opParams.units[j];
@@ -340,7 +475,6 @@
                 }
             });
             
-            // HTML Structure
             div.innerHTML = `
                 <div class="row-header">
                     <span>${srCount}. ${opName}</span>
@@ -394,12 +528,14 @@
       const data = {};
       jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
       
-      // FIX: Unique ID based on Customer Name, Part Desc, and Challan
       const cleanCustomer = data.customerName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanPart = data.partDesc.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       
       data.uniqueId = `${cleanCustomer.substring(0, 3)}_${cleanPart}_${cleanChallan}`;
+      if(data.uniqueId.length < 5) {
+           data.uniqueId = `NEW_${Date.now()}`;
+      }
       data.uniqueId = data.uniqueId.toUpperCase();
       
       const rows = [];
@@ -441,226 +577,111 @@
       return data;
     }
 
-    function applyPreview() {
-      const data = getFormData();
-      const v = (id) => document.getElementById(id).value;
-      
-      document.getElementById('pvCustomer').textContent = v('customerName');
-      document.getElementById('pvQty').textContent = v('orderQty');
-      document.getElementById('pvChallan').textContent = v('challan');
-      document.getElementById('pvPart').textContent = v('partDesc');
-      document.getElementById('pvCoating').textContent = v('coatingSpec');
-      document.getElementById('pvPaint').textContent = v('paint');
-      document.getElementById('pvBatch').textContent = v('batchNo');
-      document.getElementById('pvVerified').textContent = v('verifiedBy');
-      document.getElementById('pvApproved').textContent = v('approvedBy');
-      document.getElementById('pvNotes').textContent = v('notes');
+    // --- CLOUD ACTIONS ---
 
-      const tbody = document.getElementById('pvRows');
-      tbody.innerHTML = '';
-      
-      const allRows = data.rows;
-      let globalSr = 1; 
-
-      allRows.forEach(r => {
-        const values = (r.observation || '').split(',').map(v => v.trim()); 
-        const structure = PARAMETERS[r.operation]; 
-        
-        let filteredDetails = [];
-        for (let j = 0; j < structure.labels.length; j++) {
-            const label = structure.labels[j];
-            const unit = structure.units[j];
-            const value = values[j] || ''; 
-            
-            if (label !== "N/A" && (label.trim().length > 0 || value.trim().length > 0)) {
-                const display = `<b>${label}:</b> ${value} ${unit}`;
-                filteredDetails.push({ display, label, value });
-            }
+    async function saveOrUpdateReport() {
+        if (!window.auth || !window.auth.currentUser) {
+            alert("❌ Save Error: Cloud Save के लिए आपको LOGIN करना होगा।");
+            return;
         }
         
-        const rowspanCount = Math.max(filteredDetails.length, 1);
-        
-        for (let index = 0; index < rowspanCount; index++) {
-            const tr = document.createElement('tr');
-            let rowContent = '';
-            
-            const detail = filteredDetails[index] || { display: '', label: '', value: '' };
-
-            if (index === 0) {
-                rowContent += `
-                    <td style="text-align:center" rowspan="${rowspanCount}">${globalSr}</td>
-                    <td rowspan="${rowspanCount}">${r.dateShift || ''}</td>
-                    <td rowspan="${rowspanCount}">${r.operation || ''}</td>
-                `;
-                globalSr++;
-            }
-            
-            const displayFromTime = index === 0 ? (r.fromTime || '') : '';
-            const displayToTime = index === 0 ? (r.toTime || '') : '';
-            const displayQty = index === 0 ? (r.qty || '') : '';
-            const displayInspection = index === 0 ? (r.inspectionStatus || '') : ''; 
-            const displayOperatorChecked = index === 0 ? (r.operatorChecked || '') : ''; 
-            const displaySupervisorSign = index === 0 ? (r.supervisorSign || '') : ''; 
-            
-            let finalDisplay = detail.display;
-            if (finalDisplay.endsWith('<b>:</b> ')) { finalDisplay = finalDisplay.substring(0, finalDisplay.length - 8); }
-
-            rowContent += `
-                <td>${finalDisplay || ''}</td>
-                <td style="text-align:center">${displayFromTime}</td>
-                <td style="text-align:center">${displayToTime}</td>
-                <td style="text-align:center">${displayQty}</td>
-                <td style="text-align:center; font-weight: bold;">${displayInspection}</td> 
-                <td>${displayOperatorChecked}</td>
-                <td>${displaySupervisorSign}</td>
-            `;
-
-            tr.innerHTML = rowContent;
-            tbody.appendChild(tr);
-        }
-      });
-      
-      let currentOutputRows = tbody.querySelectorAll('tr').length;
-      const MIN_OUTPUT_ROWS = 10; // न्यूनतम 10 लाइनें दिखाने के लिए
-      
-      // खाली लाइनें जोड़ना
-      if (currentOutputRows < MIN_OUTPUT_ROWS) {
-        for (let i = 0; i < MIN_OUTPUT_ROWS - currentOutputRows; i++) {
-          const tr = document.createElement('tr');
-          // ध्यान दें: अगर ब्लैक में 10 लाइनें हैं तो यहाँ कोई खाली रो नहीं आएगी
-          tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
-          tbody.appendChild(tr);
-        }
-      }
-    }
-
-    function updateActionButtons(id = null) {
-        currentActiveReportId = id;
-        document.getElementById('deleteReport').disabled = !id; 
-        document.getElementById('currentReportId').textContent = `Active ID: ${id || '-- New --'}`;
-        document.getElementById('saveReport').textContent = currentActiveReportId ? '💾 Update Report' : '💾 Save New Report';
-    }
-
-    function clearForm() {
-        jobFields.forEach(f => {
-            const el = document.getElementById(f);
-            if (el.type === 'text' || el.tagName === 'INPUT') {
-                 el.value = el.defaultValue || ''; 
-            } else if (el.tagName === 'SELECT') {
-                 // केवल paint select को छोड़कर बाकी को default पर रीसेट करें
-                 if(f !== 'paint') el.value = el.options[0].value; 
-            }
-        });
-        
-        // फॉर्म clear होने पर भी paint को Silver पर सेट करना
-        document.getElementById('paint').value = 'Silver'; 
-        
-        updateRowInputs(); 
-        updateActionButtons(null); 
-        applyPreview();
-        document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
-    }
-
-    document.getElementById('saveReport').addEventListener('click', () => {
         const data = getFormData();
         const docId = data.uniqueId;
 
         if (!data.customerName || !data.partDesc || !data.challan || docId.length < 5) {
-             alert("❌ Save Error: Customer Name, Part Desc, and Challan No. fields must be filled to create a unique ID.");
+             alert("❌ Save Error: Customer Name, Part Desc, और Challan No. भरें।");
              return;
         }
 
-        let reports = getAllReports();
-        const timestamp = new Date().toISOString();
-        const existingIndex = reports.findIndex(r => r.uniqueId === docId);
+        const saveButton = document.getElementById('saveReport');
+        saveButton.textContent = "Saving... Wait!";
+        saveButton.disabled = true;
 
-        if (existingIndex !== -1) {
-            data.createdAt = reports[existingIndex].createdAt;
-            data.updatedAt = timestamp;
-            reports[existingIndex] = data;
-            alert(`✅ Job Card ${docId} UPDATED in Local Storage.`);
-        } else {
-            data.createdAt = timestamp;
-            data.updatedAt = timestamp;
-            reports.push(data);
-            alert(`✅ New Job Card SAVED in Local Storage. ID: ${docId}`);
+        try {
+            await window.cloudSaveReport(data, docId); 
+            alert(`✅ Job Card ${docId} SAVED/UPDATED in Cloud Database.`);
+            currentActiveReportId = docId;
+            updateActionButtons(docId); 
+            fetchAndDisplayReports(''); // Refresh list
+        } catch (error) {
+            alert(`❌ Cloud Save Error: ${error.message}.`);
+            console.error("Firebase Save Error:", error);
+        } finally {
+            saveButton.disabled = false;
+        }
+    }
+
+    async function fetchAndDisplayReports(query = '') {
+        const reportListContainer = document.getElementById('reportListContainer');
+        if (!window.auth || !window.auth.currentUser) {
+             reportListContainer.innerHTML = `<div style="padding:10px; text-align:center;">Login is required to load reports from Cloud.</div>`;
+             return;
         }
         
-        setAllReports(reports);
-        currentActiveReportId = docId;
-        updateActionButtons(docId); 
-        fetchAndDisplayReports(''); 
-    });
+        reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#2563eb;">Loading reports from Cloud...</div>`;
 
-    document.getElementById('deleteReport').addEventListener('click', () => {
+        try {
+            let allReportsArray = await window.cloudLoadReports(query);
+
+            if (allReportsArray.length === 0) {
+                reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#999;">कोई सेव्ड रिपोर्ट नहीं है।</div>`;
+                return;
+            }
+
+            allReportsArray.sort((a, b) => {
+                return new Date(b.updatedAt || b.timestamp) - new Date(a.updatedAt || a.timestamp);
+            });
+
+            reportListContainer.innerHTML = '';
+            
+            allReportsArray.forEach(r => {
+                const displayText = `${r.customerName || 'N/A Cust'} | ${r.partDesc || 'N/A Part'} | Challan: ${r.challan || 'N/A'}`;
+                const dateText = new Date(r.updatedAt || r.timestamp).toLocaleDateString('en-GB') || 'Unknown Date';
+
+                const div = document.createElement('div');
+                div.className = 'report-item';
+                if(r.uniqueId === currentActiveReportId) div.classList.add('selected'); 
+                div.dataset.id = r.uniqueId; 
+                div.innerHTML = `<span class="part-info">${displayText}</span><small style="color:#888;">${dateText}</small>`;
+                
+                div.addEventListener('click', loadReport); 
+                reportListContainer.appendChild(div);
+            });
+
+        } catch (error) {
+             reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#dc2626;">Error loading reports: ${error.message}</div>`;
+        }
+    }
+
+    async function deleteReport() {
         const idToDelete = currentActiveReportId;
         
         if (!idToDelete) { alert("Cannot delete: Please select a saved report first."); return; }
+        if (!window.auth.currentUser) { alert("Login required to delete."); return; }
 
-        const confirmDelete = confirm(`⚠️ Are you sure you want to DELETE Job Card ${idToDelete} permanently?`);
+        const confirmDelete = confirm(`⚠️ Are you sure you want to DELETE Job Card ${idToDelete} permanently from the Cloud?`);
         
         if (confirmDelete) {
-            let reports = getAllReports();
-            const initialLength = reports.length;
-            
-            reports = reports.filter(r => r.uniqueId !== idToDelete);
-            
-            if (reports.length < initialLength) {
-                setAllReports(reports);
-                alert(`🗑️ Job Card ${idToDelete} हटा दिया गया।`);
+            try {
+                await window.cloudDeleteReport(idToDelete);
+                alert(`🗑️ Job Card ${idToDelete} Cloud से हटा दिया गया।`);
                 clearForm(); 
                 fetchAndDisplayReports(''); 
-            } else {
-                 alert(`❌ Report ID ${idToDelete} लोकल स्टोरेज में नहीं मिला।`);
+            } catch (error) {
+                alert(`❌ Cloud Delete Error: ${error.message}.`);
             }
         }
-    });
-
-    function fetchAndDisplayReports(query = '') {
-        const reportListContainer = document.getElementById('reportListContainer');
-        reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#2563eb;">Loading...</div>`;
-
-        let allReportsArray = getAllReports();
-
-        if (allReportsArray.length === 0) {
-            reportListContainer.innerHTML = `<div style="padding:10px; text-align:center; color:#999;">कोई सेव्ड रिपोर्ट नहीं है।</div>`;
-            return;
-        }
-
-        allReportsArray.sort((a, b) => {
-            return new Date(b.updatedAt) - new Date(a.updatedAt);
-        });
-
-        reportListContainer.innerHTML = '';
-        
-        allReportsArray.forEach(r => {
-            const displayText = `${r.customerName || 'N/A Cust'} | ${r.partDesc || 'N/A Part'} | Challan: ${r.challan || 'N/A'}`;
-            const searchString = `${r.challan} ${r.batchNo} ${r.customerName} ${r.partDesc} ${r.uniqueId}`.toLowerCase();
-
-            if (query && !searchString.toLowerCase().includes(query.toLowerCase())) {
-                return; 
-            }
-            
-            const dateText = new Date(r.updatedAt).toLocaleDateString('en-GB') || 'Unknown Date';
-
-            const div = document.createElement('div');
-            div.className = 'report-item';
-            if(r.uniqueId === currentActiveReportId) div.classList.add('selected'); 
-            div.dataset.id = r.uniqueId; 
-            div.innerHTML = `<span class="part-info">${displayText}</span><small style="color:#888;">${dateText}</small>`;
-            
-            div.addEventListener('click', loadReport); 
-            reportListContainer.appendChild(div);
-        });
     }
 
     function loadReport(e) {
         const id = e.currentTarget.dataset.id;
-        const reports = getAllReports();
+        const reports = Array.from(document.getElementById('reportListContainer').children)
+                             .map(el => el.reportData)
+                             .filter(d => d);
         const reportData = reports.find(r => r.uniqueId === id);
 
         if (!reportData) { 
-            alert(`❌ Report ID ${id} लोकल स्टोरेज में नहीं मिला।`); 
+            alert(`❌ Report ID ${id} लिस्ट में नहीं मिला।`); 
             return; 
         }
         
@@ -677,24 +698,177 @@
         updateRowInputs(reportData.rows || []); 
         applyPreview(); 
     }
+
+    // --- UI/Utility Functions (No Change) ---
+    function updateActionButtons(id = null) {
+        currentActiveReportId = id;
+        document.getElementById('deleteReport').disabled = !id || (window.auth && !window.auth.currentUser); 
+        document.getElementById('currentReportId').textContent = `Active ID: ${id || '-- New --'}`;
+        document.getElementById('saveReport').textContent = currentActiveReportId ? '💾 Update Report' : '💾 Save New Report';
+    }
+
+    function clearForm() {
+        // Clear all fields to their default or empty values
+        jobFields.forEach(f => {
+            const el = document.getElementById(f);
+            if (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                 el.value = ''; 
+            } else if (el.tagName === 'SELECT') {
+                 el.value = el.options[0].value;
+            }
+        });
+        
+        // Default values for a new form
+        document.getElementById('customerName').value = "Star Engineering";
+        document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
+        document.getElementById('batchNo').value = "250819";
+        document.getElementById('verifiedBy').value = "SAKSHI CHAVHAN";
+        document.getElementById('approvedBy').value = "ABHIJEET DHOKRAT";
+        document.getElementById('notes').value = "Job Card initiated with Batch 250819.";
+
+        // Default paint: Black
+        document.getElementById('paint').value = 'Black'; 
+        
+        updateRowInputs(); 
+        updateActionButtons(null); 
+        applyPreview();
+    }
     
-    // --- PDF / PRINT LOGIC ---
+    function applyPreview() {
+        // ... (Preview Logic is unchanged, using getFormData()) ...
+        const data = getFormData();
+        const v = (id) => document.getElementById(id).value;
+        
+        document.getElementById('pvCustomer').textContent = v('customerName');
+        document.getElementById('pvQty').textContent = v('orderQty');
+        document.getElementById('pvChallan').textContent = v('challan');
+        document.getElementById('pvPart').textContent = v('partDesc');
+        document.getElementById('pvCoating').textContent = v('coatingSpec');
+        document.getElementById('pvPaint').textContent = v('paint');
+        document.getElementById('pvBatch').textContent = v('batchNo');
+        document.getElementById('pvVerified').textContent = v('verifiedBy');
+        document.getElementById('pvApproved').textContent = v('approvedBy');
+        document.getElementById('pvNotes').textContent = v('notes');
+
+        const tbody = document.getElementById('pvRows');
+        tbody.innerHTML = '';
+        
+        const allRows = data.rows;
+        let globalSr = 1; 
+
+        allRows.forEach(r => {
+            const values = (r.observation || '').split(',').map(v => v.trim()); 
+            const structure = PARAMETERS[r.operation]; 
+            
+            let filteredDetails = [];
+            for (let j = 0; j < structure.labels.length; j++) {
+                const label = structure.labels[j];
+                const unit = structure.units[j];
+                const value = values[j] || ''; 
+                
+                if (label !== "N/A" && (label.trim().length > 0 || value.trim().length > 0)) {
+                    const display = `<b>${label}:</b> ${value} ${unit}`;
+                    filteredDetails.push({ display, label, value });
+                }
+            }
+            
+            const rowspanCount = Math.max(filteredDetails.length, 1);
+            
+            for (let index = 0; index < rowspanCount; index++) {
+                const tr = document.createElement('tr');
+                let rowContent = '';
+                
+                const detail = filteredDetails[index] || { display: '', label: '', value: '' };
+
+                if (index === 0) {
+                    rowContent += `
+                        <td style="text-align:center" rowspan="${rowspanCount}">${globalSr}</td>
+                        <td rowspan="${rowspanCount}">${r.dateShift || ''}</td>
+                        <td rowspan="${rowspanCount}">${r.operation || ''}</td>
+                    `;
+                    globalSr++;
+                }
+                
+                const displayFromTime = index === 0 ? (r.fromTime || '') : '';
+                const displayToTime = index === 0 ? (r.toTime || '') : '';
+                const displayQty = index === 0 ? (r.qty || '') : '';
+                const displayInspection = index === 0 ? (r.inspectionStatus || '') : ''; 
+                const displayOperatorChecked = index === 0 ? (r.operatorChecked || '') : ''; 
+                const displaySupervisorSign = index === 0 ? (r.supervisorSign || '') : ''; 
+                
+                let finalDisplay = detail.display;
+                if (finalDisplay.endsWith('<b>:</b> ')) { finalDisplay = finalDisplay.substring(0, finalDisplay.length - 8); }
+
+                rowContent += `
+                    <td>${finalDisplay || ''}</td>
+                    <td style="text-align:center">${displayFromTime}</td>
+                    <td style="text-align:center">${displayToTime}</td>
+                    <td style="text-align:center">${displayQty}</td>
+                    <td style="text-align:center; font-weight: bold;">${displayInspection}</td> 
+                    <td>${displayOperatorChecked}</td>
+                    <td>${displaySupervisorSign}</td>
+                `;
+
+                tr.innerHTML = rowContent;
+                tbody.appendChild(tr);
+            }
+        });
+        
+        let currentOutputRows = tbody.querySelectorAll('tr').length;
+        const MIN_OUTPUT_ROWS = 10; 
+        
+        if (currentOutputRows < MIN_OUTPUT_ROWS) {
+            for (let i = 0; i < MIN_OUTPUT_ROWS - currentOutputRows; i++) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
+                tbody.appendChild(tr);
+            }
+        }
+    }
+    
+    // --- EVENT LISTENERS ---
+    
+    document.getElementById('signUpButton').addEventListener('click', () => window.handleAuthAction('signup'));
+    document.getElementById('loginButton').addEventListener('click', () => window.handleAuthAction('signin'));
+    document.getElementById('logoutButton').addEventListener('click', () => window.handleAuthAction('logout'));
+
+    document.getElementById('saveReport').addEventListener('click', saveOrUpdateReport);
+    document.getElementById('deleteReport').addEventListener('click', deleteReport);
+    document.getElementById('applyBtn').addEventListener('click', applyPreview);
+    document.getElementById('updateOpsBtn').addEventListener('click', updateRowInputs);
+    document.getElementById('clearBtn').addEventListener('click', clearForm);
+    document.getElementById('newReportBtn').addEventListener('click', clearForm);
+
+    jobFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', applyPreview);
+    });
+
+    document.getElementById('searchBtn').addEventListener('click', () => {
+         const query = document.getElementById('reportSearch').value;
+         fetchAndDisplayReports(query);
+    });
+
+    document.getElementById('reportSearch').addEventListener('input', (e) => {
+        const query = e.target.value;
+        fetchAndDisplayReports(query); 
+    });
+    
+    document.getElementById('paint').addEventListener('change', () => {
+        updateRowInputs(); 
+    });
+
+    // PDF/Print Listeners (Unchanged)
     document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
         applyPreview(); 
         const previewEl = document.getElementById('preview');
         
-        const canvas = await html2canvas(previewEl, {
-            scale: 2, 
-            useCORS: true 
-        });
-        
+        const canvas = await html2canvas(previewEl, { scale: 2, useCORS: true });
         const imgData = canvas.toDataURL('image/png');
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
-        
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        
         const imgHeight = (canvas.height * pdfWidth) / canvas.width;
         
         let position = 0;
@@ -708,7 +882,6 @@
                     pdf.addPage();
                     position = - (pdfHeight * (page - 1));
                 }
-                
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
                 heightLeft -= pdfHeight;
                 page++;
@@ -726,44 +899,9 @@
         window.print();
     });
 
-    // --- EVENT LISTENERS ---
-
-    document.getElementById('applyBtn').addEventListener('click', applyPreview);
-    document.getElementById('updateOpsBtn').addEventListener('click', updateRowInputs);
-    document.getElementById('clearBtn').addEventListener('click', clearForm);
-    document.getElementById('newReportBtn').addEventListener('click', clearForm);
-
-    jobFields.forEach(id => document.getElementById(id).addEventListener('change', applyPreview));
-
-    document.getElementById('searchBtn').addEventListener('click', () => {
-         const query = document.getElementById('reportSearch').value;
-         fetchAndDisplayReports(query);
-    });
-
-    document.getElementById('reportSearch').addEventListener('input', (e) => {
-        const query = e.target.value;
-        fetchAndDisplayReports(query); 
-    });
-    
-    // Paint select पर इवेंट लिसनर ताकि मान बदलने पर तुरंत ऑपरेशन्स अपडेट हों
-    document.getElementById('paint').addEventListener('change', () => {
-        // paint बदलने पर भी operations को अपडेट कर देना चाहिए
-        updateRowInputs(); 
-    });
-
-
     document.addEventListener('DOMContentLoaded', () => {
         updateRowInputs(); 
-        // clearForm() को हटा दिया गया है ताकि Silver default पर लोड हो, 
-        // लेकिन यह सुनिश्चित किया गया है कि updateRowInputs() DOMContentLoaded पर चले।
-        fetchAndDisplayReports(''); 
-
-        // PWA Service Worker Registration (Ignore if not needed for your setup)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // service-worker.js file is needed for this to work as PWA.
-            });
-        }
+        // Initial fetch will happen via the Firebase Auth Listener (updateAuthUI)
     });
   </script>
 </body>
