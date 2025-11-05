@@ -7,6 +7,21 @@
   
   <link rel="manifest" href="manifest.json">
   
+  <script>
+    // 🔒 SECURITY Enhancement: Disable Right Click and Developer Tools Access
+    document.addEventListener('contextmenu', event => event.preventDefault()); // Right Click Disable
+    document.onkeydown = function(e) {
+        // F12 (123) और Ctrl+Shift+I/C/J/K को ब्लॉक करता है
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J' || e.key === 'K'))) {
+            return false;
+        }
+        // Ctrl+U (View Source) को ब्लॉक करता है
+        if (e.ctrlKey && e.key === 'u') {
+            return false;
+        }
+    };
+  </script>
+  
   <script type="module">
         // --- FIREBASE CONFIGURATION ---
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
