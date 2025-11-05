@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Job Card / Route Card - Cloud App (PWA) with RBAC & Status</title>
+  <title>Job Card / Route Card - Cloud App (PWA) with Full Access</title>
   
   <link rel="manifest" href="manifest.json">
   
   <script type="module">
         // --- FIREBASE CONFIGURATION ---
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        // 🆕 Added getDoc for role fetching
-        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        // Simplified imports: Removed getDoc
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         
         const firebaseConfig = {
@@ -28,49 +28,38 @@
         window.db = getFirestore(app);
         window.auth = getAuth(app); 
 
-        let currentUserRole = 'logged_out'; 
-        let currentView = 'home'; // 'home' or 'form'
+        // 🛑 RBAC REMOVED: Assume full access for any logged-in user
+        let currentUserRole = 'admin'; 
+        let currentView = 'home'; 
 
-        // --- RBAC Access Control Function (New/Updated) ---
+        // --- Full Access Control Function (SIMPLIFIED) ---
         function updateActionButtons(reportData) {
             const isReportLoaded = reportData !== null && !currentActiveReportId.startsWith('NEW');
-            const isViewer = currentUserRole === 'viewer';
-            const isSupervisor = currentUserRole === 'supervisor';
-            const isAdmin = currentUserRole === 'admin';
-            
-            // --- Access Control Logic ---
-            
-            // SAVE/UPDATE button: Only Admins and Supervisors can save
-            document.getElementById('saveReport').disabled = !(isAdmin || isSupervisor);
-            
-            // DELETE button: Only Admins can delete, and only if a report is loaded
-            // Admins can delete completed jobs, others cannot.
             const isCompleted = document.getElementById('statusField')?.value === 'Completed';
-            document.getElementById('deleteReport').disabled = !(isAdmin && isReportLoaded);
+            
+            // 🔓 All actions enabled for logged-in users (since role is 'admin' or logged_out)
+            const isLoggedIn = currentUserRole !== 'logged_out';
 
-            // COMPLETE button: Only Admins and Supervisors can mark as completed, and only if it's currently Running
-            document.getElementById('completeReportBtn').disabled = !(isReportLoaded && (isAdmin || isSupervisor) && !isCompleted);
+            document.getElementById('saveReport').disabled = !isLoggedIn;
+            document.getElementById('deleteReport').disabled = !(isLoggedIn && isReportLoaded);
+            document.getElementById('completeReportBtn').disabled = !(isReportLoaded && isLoggedIn && !isCompleted);
 
-            // FORM Inputs: Disable all inputs for Viewers. 
-            const isFormDisabled = isViewer; 
+            // FORM Inputs: All inputs enabled if logged in
             document.querySelectorAll('.form input, .form select, .form button:not(#loginButton, #signUpButton, #logoutButton, #homeViewBtn, #formViewBtn, #newJobFromHome)').forEach(el => {
-                el.disabled = isFormDisabled;
+                el.disabled = !isLoggedIn;
             });
 
-            // Apply/Update button: Enable for Admins/Supervisors only
-            document.getElementById('applyBtn').disabled = !(isAdmin || isSupervisor);
-            document.getElementById('updateOpsBtn').disabled = !(isAdmin || isSupervisor);
+            document.getElementById('applyBtn').disabled = !isLoggedIn;
+            document.getElementById('updateOpsBtn').disabled = !isLoggedIn;
 
-            // Current Report ID display
             document.getElementById('currentReportId').textContent = `Active ID: ${reportData ? reportData.uniqueId : '-- New --'}`;
             
-            // Force Save button text change if it's an update
-            if (isReportLoaded && (isAdmin || isSupervisor)) {
+            if (isReportLoaded && isLoggedIn) {
                 document.getElementById('saveReport').textContent = '💾 Update Report';
-            } else if (isAdmin || isSupervisor) {
+            } else if (isLoggedIn) {
                 document.getElementById('saveReport').textContent = '💾 Save New Report';
             } else {
-                 document.getElementById('saveReport').textContent = '⚠️ No Save Access';
+                 document.getElementById('saveReport').textContent = '⚠️ Log In to Save';
             }
         }
 
@@ -85,14 +74,9 @@
 
             try {
                 if (actionType === 'signup') {
-                    const userCredential = await createUserWithEmailAndPassword(window.auth, email, password);
-                    // 🆕 New: Add user to 'users' collection with default role 'viewer'
-                    await setDoc(doc(window.db, 'users', email), {
-                        email: email,
-                        role: 'viewer', 
-                        createdAt: new Date().toISOString()
-                    });
-                    alert(`✅ Signed Up and Logged In as ${email}. Default role 'viewer' assigned. (Admin role must be set in Firebase Console)`);
+                    // Simplified: Just create user in Auth, no Firestore doc needed now
+                    await createUserWithEmailAndPassword(window.auth, email, password);
+                    alert(`✅ Signed Up and Logged In as ${email}. Full access enabled.`);
                 } else if (actionType === 'signin') {
                     await signInWithEmailAndPassword(window.auth, email, password);
                     alert(`✅ Signed In as ${email}.`);
@@ -114,22 +98,14 @@
             if (user) {
                 loggedOutUI.style.display = 'none';
                 loggedInUI.style.display = 'flex';
-                userEmailDisplay.textContent = `User: ${user.email} | Role: Loading...`;
                 
-                // --- FETCH USER ROLE ---
-                try {
-                    const userDoc = await getDoc(doc(window.db, 'users', user.email));
-                    currentUserRole = userDoc.exists() ? userDoc.data().role : 'viewer'; // Default to viewer
-                } catch (error) {
-                    console.error("Error fetching user role:", error);
-                    currentUserRole = 'viewer'; 
-                }
-
-                userEmailDisplay.textContent = `User: ${user.email} | Role: ${currentUserRole.toUpperCase()}`;
+                // 🛑 RBAC REMOVED: Set role to 'admin' (full access) if logged in
+                currentUserRole = 'admin'; 
+                userEmailDisplay.textContent = `User: ${user.email} | Role: FULL ACCESS`;
+                
                 authStatus.textContent = `Status: Logged In (Cloud Active)`;
                 authStatus.style.color = '#059669';
                 
-                // 🆕 Switch to Home View after successful login and role fetch
                 showView('home');
                 
             } else {
@@ -139,7 +115,6 @@
                 authStatus.textContent = "Status: Logged Out (Cloud Disabled)";
                 authStatus.style.color = '#dc2626';
                 currentUserRole = 'logged_out';
-                // Show home/form disabled
             }
             
             updateActionButtons(currentActiveReportId ? getFormData() : null);
@@ -156,7 +131,7 @@
                 timestamp: new Date().toISOString(),
                 savedBy: window.auth.currentUser.email,
                 updatedAt: new Date().toISOString(), 
-                status: data.status || 'Running' // 🆕 New: Save Status
+                status: data.status || 'Running' 
             };
              await setDoc(doc(window.db, 'job_cards', docId), record); 
         };
@@ -166,7 +141,6 @@
             const reports = [];
             let qRef = collection(window.db, 'job_cards');
             
-            // 🆕 Filter by status first
             let q = query(qRef, where("status", "==", statusFilter));
 
             const querySnapshot = await getDocs(q);
@@ -175,7 +149,6 @@
                 const data = doc.data();
                 data.uniqueId = doc.id; 
                 
-                // Apply search query filter in memory
                 const searchString = `${data.challan} ${data.batchNo} ${data.customerName} ${data.partDesc} ${data.uniqueId}`.toLowerCase();
                 if (!queryTerm || searchString.includes(queryTerm.toLowerCase())) {
                     reports.push(data);
@@ -187,11 +160,11 @@
 
         window.cloudDeleteReport = async (docId) => {
             if (!window.auth.currentUser) throw new Error("User not logged in.");
-            if (currentUserRole !== 'admin') throw new Error("Only Admin can delete reports.");
+            // 🛑 RBAC REMOVED: Any logged-in user can delete
             await deleteDoc(doc(window.db, 'job_cards', docId));
         };
 
-        // --- NEW VIEW SWITCHING LOGIC ---
+        // --- NEW VIEW SWITCHING LOGIC (UNCHANGED) ---
         function showView(view) {
             const homePanel = document.getElementById('homePanel');
             const formPanel = document.querySelector('.form');
@@ -202,27 +175,24 @@
             currentView = view;
             
             if (view === 'home') {
-                // Show Home View
                 homePanel.style.display = 'flex';
                 formPanel.style.display = 'none';
                 previewPanel.style.display = 'none';
                 homeViewBtn.style.display = 'none';
                 formViewBtn.style.display = 'block';
-                // Load jobs when switching to home
                 if (window.auth.currentUser) {
                     window.loadReportsList('', 'Running'); 
                     window.loadReportsList('', 'Completed'); 
                 }
             } else { 
-                // Show Form View
-                homePanel.style.display = 'none';
                 formPanel.style.display = 'block';
                 previewPanel.style.display = 'flex';
+                homePanel.style.display = 'none';
                 homeViewBtn.style.display = 'block';
                 formViewBtn.style.display = 'none';
             }
         }
-        window.showView = showView; // Make globally accessible for home buttons
+        window.showView = showView; 
         
     </script>
     
@@ -231,7 +201,6 @@
     body { font-family: Arial, sans-serif; margin: 12px; background:#f5f5f5; font-size: 14px; }
     .container { display: flex; gap: 12px; min-height: 85vh; }
     .panel { background: white; padding: 12px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-    /* **IMPORTANT:** Form panel now scrolls vertically as needed */
     .form { width: 36%; max-width:420px; overflow-y:auto; height:85vh; flex-shrink: 0; } 
     .preview-wrap { width: 64%; display:flex; flex-direction:column; gap:8px; align-items:center; flex-grow: 1; min-width: 300px; }
     .preview { 
@@ -260,7 +229,6 @@
     button:disabled { background:#9ca3af; cursor: not-allowed; }
     .note { font-size:12px; color:#666; margin-top:8px; }
     
-    /* HTML Preview Table (used for screen display/printing only) - Increased Spacing */
     table { 
         width:100%; 
         border-collapse: collapse; 
@@ -268,10 +236,10 @@
     }
     table th, table td { 
         border:1px solid #444; 
-        padding: 4px 6px; /* Increased padding */
+        padding: 4px 6px; 
         text-align:left; 
         vertical-align:top; 
-        line-height: 1.4; /* Increased line height for spacing */
+        line-height: 1.4; 
     } 
     
     #pvTable td:nth-child(5) { 
@@ -279,7 +247,6 @@
         line-height: 1.2;
     }
 
-    /* **UPDATED:** Removed max-height and overflow-y to prevent scrolling within operation inputs */
     .rows-input { 
         margin-top:8px; 
         border:1px solid #ddd; 
@@ -403,7 +370,7 @@
     </div>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px; flex-wrap: wrap;">
-    <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Cloud PWA System</h1>
+    <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Cloud PWA System (Full Access)</h1>
     <div class="actions" style="width: auto; align-items: center; flex-wrap: wrap;">
       <button id="homeViewBtn" class="secondary" style="background:#5a67d8;">🏠 Home / Job Folders</button> 
       <button id="formViewBtn" class="secondary" style="background:#2563eb; display:none;">📝 Go to Job Card Form</button> 
@@ -633,7 +600,7 @@
       { op: "Spare Operation", color: 'N/A' }, 
     ];
     
-    // --- Core Logic Functions - getCurrentPredefinedOperations ---
+    // --- Core Logic Functions - getCurrentPredefinedOperations (UNCHANGED) ---
     function getCurrentPredefinedOperations() {
         const paintSelect = document.getElementById('paint');
         const paintType = paintSelect.value;
@@ -646,7 +613,7 @@
         silverDiv.classList.add('hide-inspection');
         blackDiv.classList.add('hide-inspection');
         
-        let requiredLength = 10; // Default for Black
+        let requiredLength = 10; 
         
         if (paintType === 'Black') {
             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
@@ -657,7 +624,7 @@
                 { op: "Top Coat -1 & Curing", color: 'Black' },
                 { op: "Top Coat -2 & Curing", color: 'Black' }
             );
-             requiredLength = 10; // Black has 10 total operations (6 base + 4 coating)
+             requiredLength = 10; 
         } else if (paintType === 'Silver') {
              document.getElementById('coatingSpec').value = "2 Base | 1 Top";
              silverDiv.classList.remove('hide-inspection');
@@ -666,7 +633,7 @@
                 { op: "Base Coat -2 & Curing", color: 'Silver' },
                 { op: "Top Coat -1 & Curing", color: 'Silver' }
             );
-            requiredLength = 9; // Silver has 9 total operations (6 base + 3 coating)
+            requiredLength = 9; 
         } else {
              document.getElementById('coatingSpec').value = "2 Base | 2 Top";
              blackDiv.classList.remove('hide-inspection');
@@ -682,12 +649,10 @@
         const finalInspectionIndex = ops.findIndex(op => op.op === 'Final Inspection');
         ops.splice(finalInspectionIndex, 0, ...coatingSteps);
         
-        // Remove Spare Operations if they exceed the required length (9 for Silver, 10 for Black)
         while (ops.length > requiredLength) {
              ops.pop();
         }
         
-        // Safety check: Add Spare Ops if the length is still less than required
         while (ops.length < requiredLength) { 
             ops.push({ op: "Spare Operation", color: 'N/A' }); 
         }
@@ -695,6 +660,7 @@
         return ops; 
     }
 
+    // --- updateRowInputs (UNCHANGED) ---
     function updateRowInputs(savedRows = []) {
         const predefinedOperations = getCurrentPredefinedOperations();
         const rowsInputContainer = document.getElementById('rowsInput');
@@ -759,7 +725,6 @@
                 }
             });
             
-            // Re-adding the inspection select field to the observation fields section
             obsFieldsHTML += `
                 <div>
                     <label>Inspection OK/NOK</label>
@@ -811,11 +776,11 @@
         applyPreview(); 
     }
 
+    // --- getFormData (UNCHANGED) ---
     function getFormData() {
       const data = {};
       jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
       
-      // 🆕 New: Get status field
       data.status = document.getElementById('statusField')?.value || 'Running'; 
       
       const cleanCustomer = data.customerName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
@@ -846,7 +811,6 @@
         const observation = observationValues.join('; ').trim(); 
 
         const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
-        // Only include non-empty rows, unless it's a non-spare operation
         if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '') return;
         
         rows.push({
@@ -867,7 +831,7 @@
       return data;
     }
 
-    // --- Utility Functions ---
+    // --- Utility Functions (UNCHANGED) ---
 
     function setFormData(data) {
         jobFields.forEach(f => {
@@ -877,15 +841,11 @@
             }
         });
         
-        // 🆕 New: Set the status for the active job
         const statusEl = document.getElementById('statusField');
         if (statusEl) {
             const currentStatus = data.status || 'Running';
             statusEl.value = currentStatus;
             document.getElementById('completeReportBtn').textContent = (currentStatus === 'Completed') ? '✅ Job is Completed' : '✅ Mark as Completed';
-            
-            // Re-enable/disable based on status and user role via updateActionButtons
-            // document.getElementById('completeReportBtn').disabled = currentStatus === 'Completed'; 
         }
 
 
@@ -893,7 +853,6 @@
         document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
         
         document.getElementById('saveReport').textContent = currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
-        // document.getElementById('deleteReport').disabled logic is now in updateActionButtons
         
         updateRowInputs(data.rows || []); 
         updateActionButtons(data);
@@ -921,7 +880,6 @@
         document.getElementById('baseBatch').value = 'BCB101';
         document.getElementById('topBatch').value = 'TCB202';
         
-        // 🆕 New: Reset status field
         const statusEl = document.getElementById('statusField');
         if (statusEl) statusEl.value = 'Running';
         document.getElementById('completeReportBtn').textContent = '✅ Mark as Completed';
@@ -959,7 +917,6 @@
             document.getElementById('saveReport').textContent = '💾 Update Report';
             alert(`✅ रिपोर्ट सफलतापूर्वक क्लाउड पर सेव/अपडेट हो गई है। ID: ${currentActiveReportId}`);
             
-            // Reload job lists on home page
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             
@@ -975,8 +932,9 @@
             alert("❌ यह एक नई रिपोर्ट है, इसे डिलीट नहीं किया जा सकता।");
             return;
         }
-        // RBAC Check is inside cloudDeleteReport
-        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं? (यह क्रिया केवल Admin ही कर सकते हैं)`)) {
+        
+        // 🛑 RBAC REMOVED: No more Admin check here, only check for logged in is in cloudDeleteReport
+        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं?`)) {
             return;
         }
         
@@ -984,7 +942,6 @@
             await window.cloudDeleteReport(currentActiveReportId);
             alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक डिलीट हो गई है।`);
             clearForm();
-            // Reload job lists on home page
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed');
         } catch (e) {
@@ -993,12 +950,10 @@
         }
     }
 
-    // --- UPDATED: loadReportsList now takes a status filter ---
     window.loadReportsList = async (query = '', statusFilter = 'Running') => {
         try {
             const reports = await window.cloudLoadReports(query, statusFilter);
             
-            // Determine which container to use (Running Jobs or Completed Jobs)
             const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
             const container = document.getElementById(containerId);
             
@@ -1012,7 +967,6 @@
             reports.forEach(report => {
                 const item = document.createElement('div');
                 item.className = 'report-item';
-                // Highlight if it's the currently loaded active report
                 if (report.uniqueId === currentActiveReportId) {
                      item.classList.add('selected');
                 }
@@ -1023,7 +977,7 @@
                 `;
                 item.addEventListener('click', () => {
                     handleLoadReport(report);
-                    showView('form'); // 🆕 Switch to form view on click
+                    showView('form'); 
                 });
                 container.appendChild(item);
             });
@@ -1037,7 +991,6 @@
 
     function handleLoadReport(reportData) {
         setFormData(reportData);
-        // Deselect all and select the currently loaded report item in the list
         document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
         const selectedItem = document.querySelector(`.report-item[data-id="${reportData.uniqueId}"]`);
         if (selectedItem) {
@@ -1045,7 +998,7 @@
         }
     }
     
-    // --- NEW FUNCTION: Mark Job as Completed ---
+    // --- Mark Job as Completed (UNCHANGED) ---
     async function handleCompleteReport() {
         if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
             alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप Completed मार्क करना चाहते हैं।");
@@ -1063,18 +1016,15 @@
         
         try {
             const data = getFormData();
-            data.status = 'Completed'; // Set status to Completed
+            data.status = 'Completed'; 
             
-            // Save the updated status to the cloud
             await window.cloudSaveReport(data, data.uniqueId);
             
-            // Update UI elements
             document.getElementById('statusField').value = 'Completed';
             document.getElementById('completeReportBtn').textContent = '✅ Job is Completed';
             
             alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक 'Completed' मार्क हो गई है।`);
             
-            // Reload job lists and update buttons
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             updateActionButtons(data);
@@ -1086,7 +1036,7 @@
 
 
     // ------------------------------------------------------------------
-    // --- applyPreview (HTML Preview ONLY) - UPDATED HEIGHT LOGIC ---
+    // --- applyPreview (UNCHANGED) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1179,7 +1129,6 @@
             tr.innerHTML = rowContent;
             tbody.appendChild(tr);
             
-            // Row Height Logic for First Data Row (Sr No 1) and others
             const rowHeight = (globalSr === 1) ? '5mm' : '18mm';
             tr.style.height = rowHeight; 
             tr.querySelectorAll('td').forEach(td => td.style.height = rowHeight);
@@ -1195,7 +1144,6 @@
                 tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
                 tbody.appendChild(tr);
                 
-                // Row Height Logic for Remaining Blank Rows (Sr No 2 onwards)
                 const blankSr = globalSr + i;
                 const rowHeight = (blankSr === 1) ? '5mm' : '18mm';
                 tr.style.height = rowHeight; 
@@ -1205,7 +1153,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (UPDATED: Row Count and Height) ---
+    // --- generatePdfWithAutoTable (UNCHANGED) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         const data = getFormData();
@@ -1320,13 +1268,9 @@
             globalSr++;
         });
         
-        // Fill remaining rows to reach the required length (9 for Silver, 10 for Black)
         while (mainBody.length < requiredLength) {
             mainBody.push([globalSr++, '', '', '', '', '', '', '', '', '']);
         }
-        
-        
-        // Define row heights based on your requirement (5mm for Sr No 1, 18mm for others)
         
         pdf.autoTable({
             startY: yOffset,
@@ -1361,7 +1305,6 @@
                 8: { cellWidth: 15, halign: 'center' }, 
                 9: { cellWidth: 26 } 
             },
-            // Hook to handle individual row height
             didParseCell: (data) => {
                 if (data.section === 'body' && data.row.index === 0) {
                      data.cell.styles.minCellHeight = 5.0; 
@@ -1370,7 +1313,6 @@
                 }
                 
                 if (data.section === 'body' && data.column.dataKey === 4 && data.cell.text.length > 1) {
-                    // Reduce font size for long observation text
                     data.cell.styles.fontSize = 5.5; 
                 }
             },
@@ -1378,7 +1320,6 @@
         });
         
         // --- Footer ---
-        // Calculate dynamic footer start Y
         let footerY = Math.max(pdf.autoTable.previous.finalY + 3, availablePageEnd - 10);
         
         pdf.setFontSize(6.5); 
@@ -1396,8 +1337,7 @@
         pdf.save(fileName);
     }
 
-    // --- Event Listeners ---
-    
+    // --- Event Listeners (UNCHANGED) ---
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
     document.getElementById('printBtn').addEventListener('click', () => {
         applyPreview(); 
@@ -1412,7 +1352,6 @@
     document.getElementById('saveReport').addEventListener('click', handleSaveReport);
     document.getElementById('deleteReport').addEventListener('click', handleDeleteReport);
     
-    // 🆕 New Event Listeners for View Switching and Status
     document.getElementById('homeViewBtn').addEventListener('click', () => showView('home'));
     document.getElementById('formViewBtn').addEventListener('click', () => showView('form'));
     document.getElementById('newJobFromHome').addEventListener('click', () => {
@@ -1425,8 +1364,7 @@
         clearForm();
         showView('form');
     });
-    // --- End Event Listeners ---
-
+    
     document.addEventListener('DOMContentLoaded', () => {
         clearForm(); 
     });
