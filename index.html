@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Job Card / Route Card - Cloud App (PWA)</title>
+  <title>Job Card / Route Card - Cloud App (PWA) with RBAC & Status</title>
   
   <link rel="manifest" href="manifest.json">
   
   <script type="module">
-        // --- FIREBASE CONFIGURATION (UNCHANGED) ---
+        // --- FIREBASE CONFIGURATION ---
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where, limit } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        // 🆕 Added getDoc for role fetching
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         
         const firebaseConfig = {
@@ -26,8 +27,54 @@
         const app = initializeApp(firebaseConfig);
         window.db = getFirestore(app);
         window.auth = getAuth(app); 
-        
-        // --- AUTHENTICATION & CLOUD FUNCTIONS (UNCHANGED) ---
+
+        let currentUserRole = 'logged_out'; 
+        let currentView = 'home'; // 'home' or 'form'
+
+        // --- RBAC Access Control Function (New/Updated) ---
+        function updateActionButtons(reportData) {
+            const isReportLoaded = reportData !== null && !currentActiveReportId.startsWith('NEW');
+            const isViewer = currentUserRole === 'viewer';
+            const isSupervisor = currentUserRole === 'supervisor';
+            const isAdmin = currentUserRole === 'admin';
+            
+            // --- Access Control Logic ---
+            
+            // SAVE/UPDATE button: Only Admins and Supervisors can save
+            document.getElementById('saveReport').disabled = !(isAdmin || isSupervisor);
+            
+            // DELETE button: Only Admins can delete, and only if a report is loaded
+            // Admins can delete completed jobs, others cannot.
+            const isCompleted = document.getElementById('statusField')?.value === 'Completed';
+            document.getElementById('deleteReport').disabled = !(isAdmin && isReportLoaded);
+
+            // COMPLETE button: Only Admins and Supervisors can mark as completed, and only if it's currently Running
+            document.getElementById('completeReportBtn').disabled = !(isReportLoaded && (isAdmin || isSupervisor) && !isCompleted);
+
+            // FORM Inputs: Disable all inputs for Viewers. 
+            const isFormDisabled = isViewer; 
+            document.querySelectorAll('.form input, .form select, .form button:not(#loginButton, #signUpButton, #logoutButton, #homeViewBtn, #formViewBtn, #newJobFromHome)').forEach(el => {
+                el.disabled = isFormDisabled;
+            });
+
+            // Apply/Update button: Enable for Admins/Supervisors only
+            document.getElementById('applyBtn').disabled = !(isAdmin || isSupervisor);
+            document.getElementById('updateOpsBtn').disabled = !(isAdmin || isSupervisor);
+
+            // Current Report ID display
+            document.getElementById('currentReportId').textContent = `Active ID: ${reportData ? reportData.uniqueId : '-- New --'}`;
+            
+            // Force Save button text change if it's an update
+            if (isReportLoaded && (isAdmin || isSupervisor)) {
+                document.getElementById('saveReport').textContent = '💾 Update Report';
+            } else if (isAdmin || isSupervisor) {
+                document.getElementById('saveReport').textContent = '💾 Save New Report';
+            } else {
+                 document.getElementById('saveReport').textContent = '⚠️ No Save Access';
+            }
+        }
+
+        // --- AUTHENTICATION & CLOUD FUNCTIONS ---
         window.handleAuthAction = async (actionType) => {
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
@@ -38,8 +85,14 @@
 
             try {
                 if (actionType === 'signup') {
-                    await createUserWithEmailAndPassword(window.auth, email, password);
-                    alert(`✅ Signed Up and Logged In as ${email}.`);
+                    const userCredential = await createUserWithEmailAndPassword(window.auth, email, password);
+                    // 🆕 New: Add user to 'users' collection with default role 'viewer'
+                    await setDoc(doc(window.db, 'users', email), {
+                        email: email,
+                        role: 'viewer', 
+                        createdAt: new Date().toISOString()
+                    });
+                    alert(`✅ Signed Up and Logged In as ${email}. Default role 'viewer' assigned. (Admin role must be set in Firebase Console)`);
                 } else if (actionType === 'signin') {
                     await signInWithEmailAndPassword(window.auth, email, password);
                     alert(`✅ Signed In as ${email}.`);
@@ -52,33 +105,44 @@
             }
         };
 
-        window.updateAuthUI = (user) => {
+        window.updateAuthUI = async (user) => {
             const loggedOutUI = document.getElementById('loggedOutUI');
             const loggedInUI = document.getElementById('loggedInUI');
             const authStatus = document.getElementById('authStatus');
             const userEmailDisplay = document.getElementById('userEmailDisplay');
             
-            const saveReportBtn = document.getElementById('saveReport');
-            const deleteReportBtn = document.getElementById('deleteReport');
-            const searchBtn = document.getElementById('searchBtn');
-
             if (user) {
                 loggedOutUI.style.display = 'none';
                 loggedInUI.style.display = 'flex';
-                userEmailDisplay.textContent = `User: ${user.email}`;
-                saveReportBtn.disabled = false;
-                searchBtn.disabled = false;
-                window.loadReportsList(); 
-                authStatus.textContent = 'Status: Logged In (Cloud Active)';
+                userEmailDisplay.textContent = `User: ${user.email} | Role: Loading...`;
+                
+                // --- FETCH USER ROLE ---
+                try {
+                    const userDoc = await getDoc(doc(window.db, 'users', user.email));
+                    currentUserRole = userDoc.exists() ? userDoc.data().role : 'viewer'; // Default to viewer
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    currentUserRole = 'viewer'; 
+                }
+
+                userEmailDisplay.textContent = `User: ${user.email} | Role: ${currentUserRole.toUpperCase()}`;
+                authStatus.textContent = `Status: Logged In (Cloud Active)`;
+                authStatus.style.color = '#059669';
+                
+                // 🆕 Switch to Home View after successful login and role fetch
+                showView('home');
+                
             } else {
+                // Logged Out State
                 loggedOutUI.style.display = 'flex';
                 loggedInUI.style.display = 'none';
-                saveReportBtn.disabled = true;
-                deleteReportBtn.disabled = true;
-                searchBtn.disabled = true;
-                document.getElementById('reportListContainer').innerHTML = '<div style="padding:10px; text-align:center;">Login is required to load reports from Cloud.</div>';
-                authStatus.textContent = 'Status: Logged Out (Cloud Disabled)';
+                authStatus.textContent = "Status: Logged Out (Cloud Disabled)";
+                authStatus.style.color = '#dc2626';
+                currentUserRole = 'logged_out';
+                // Show home/form disabled
             }
+            
+            updateActionButtons(currentActiveReportId ? getFormData() : null);
         };
 
         onAuthStateChanged(window.auth, (user) => {
@@ -92,40 +156,73 @@
                 timestamp: new Date().toISOString(),
                 savedBy: window.auth.currentUser.email,
                 updatedAt: new Date().toISOString(), 
+                status: data.status || 'Running' // 🆕 New: Save Status
             };
              await setDoc(doc(window.db, 'job_cards', docId), record); 
         };
         
-        window.cloudLoadReports = async (queryTerm = '') => {
+        window.cloudLoadReports = async (queryTerm = '', statusFilter = 'Running') => {
             if (!window.auth.currentUser) return [];
             const reports = [];
             let qRef = collection(window.db, 'job_cards');
             
-            if (queryTerm) {
-                const querySnapshot = await getDocs(qRef);
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    data.uniqueId = doc.id; 
-                    const searchString = `${data.challan} ${data.batchNo} ${data.customerName} ${data.partDesc} ${data.uniqueId}`.toLowerCase();
-                    if (searchString.includes(queryTerm.toLowerCase())) {
-                        reports.push(data);
-                    }
-                });
-            } else {
-                const querySnapshot = await getDocs(qRef);
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    data.uniqueId = doc.id; 
+            // 🆕 Filter by status first
+            let q = query(qRef, where("status", "==", statusFilter));
+
+            const querySnapshot = await getDocs(q);
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                data.uniqueId = doc.id; 
+                
+                // Apply search query filter in memory
+                const searchString = `${data.challan} ${data.batchNo} ${data.customerName} ${data.partDesc} ${data.uniqueId}`.toLowerCase();
+                if (!queryTerm || searchString.includes(queryTerm.toLowerCase())) {
                     reports.push(data);
-                });
-            }
+                }
+            });
+
             return reports.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         };
 
         window.cloudDeleteReport = async (docId) => {
             if (!window.auth.currentUser) throw new Error("User not logged in.");
+            if (currentUserRole !== 'admin') throw new Error("Only Admin can delete reports.");
             await deleteDoc(doc(window.db, 'job_cards', docId));
         };
+
+        // --- NEW VIEW SWITCHING LOGIC ---
+        function showView(view) {
+            const homePanel = document.getElementById('homePanel');
+            const formPanel = document.querySelector('.form');
+            const previewPanel = document.querySelector('.preview-wrap');
+            const homeViewBtn = document.getElementById('homeViewBtn');
+            const formViewBtn = document.getElementById('formViewBtn');
+        
+            currentView = view;
+            
+            if (view === 'home') {
+                // Show Home View
+                homePanel.style.display = 'flex';
+                formPanel.style.display = 'none';
+                previewPanel.style.display = 'none';
+                homeViewBtn.style.display = 'none';
+                formViewBtn.style.display = 'block';
+                // Load jobs when switching to home
+                if (window.auth.currentUser) {
+                    window.loadReportsList('', 'Running'); 
+                    window.loadReportsList('', 'Completed'); 
+                }
+            } else { 
+                // Show Form View
+                homePanel.style.display = 'none';
+                formPanel.style.display = 'block';
+                previewPanel.style.display = 'flex';
+                homeViewBtn.style.display = 'block';
+                formViewBtn.style.display = 'none';
+            }
+        }
+        window.showView = showView; // Make globally accessible for home buttons
         
     </script>
     
@@ -262,6 +359,8 @@
         .auth-controls { justify-content: center; margin-top: 8px; }
         .auth-bar input { width: calc(50% - 10px); margin: 5px; }
         .auth-bar button { width: auto; margin: 5px; }
+        
+        #homePanel { height: auto !important; }
     }
     @media print {
         body * { visibility: hidden; }
@@ -306,6 +405,8 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px; flex-wrap: wrap;">
     <h1 style="font-size:18px;margin:0 0 5px 0;">Job Card / Route Card — Cloud PWA System</h1>
     <div class="actions" style="width: auto; align-items: center; flex-wrap: wrap;">
+      <button id="homeViewBtn" class="secondary" style="background:#5a67d8;">🏠 Home / Job Folders</button> 
+      <button id="formViewBtn" class="secondary" style="background:#2563eb; display:none;">📝 Go to Job Card Form</button> 
       <span id="currentReportId" style="font-size:14px; color:#666; margin-right: 15px;">Active ID: -- New --</span>
       <button id="downloadPdfBtn" class="pdf-btn">⬇️ Download PDF (Auto Height)</button>
       <button id="printBtn" class="print-btn">🖨️ Print Job Card (Screen View)</button>
@@ -313,23 +414,48 @@
   </div>
 
   <div class="container">
-    <div class="panel form">
+    
+    <div id="homePanel" class="panel" style="width:100%; height:85vh; display: none; flex-direction: column; gap: 15px;">
+        <h2 style="font-size: 20px; color:#10b981; margin-bottom: 0;">📋 Job Card Management Home</h2>
+        <div style="display: flex; gap: 15px; flex-grow: 1;">
+            
+            <div style="flex: 1; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fffbe6; display: flex; flex-direction: column;">
+                <h3 style="margin: 0 0 10px 0; color:#f59e0b;">🏃 Running Jobs (Active)</h3>
+                <div class="search-area" style="margin-bottom: 8px;">
+                    <input id="runningSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Running')" />
+                    <button onclick="loadReportsList(document.getElementById('runningSearch').value, 'Running')">🔍</button>
+                </div>
+                <div id="runningJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1;">
+                    <div style="padding:10px; text-align:center; color:#666;">... Loading Running Jobs ...</div>
+                </div>
+                <div style="margin-top: 10px; text-align: center;">
+                    <button id="newJobFromHome" style="background:#10b981;">➕ Create New Job Card</button>
+                </div>
+            </div>
+            
+            <div style="flex: 1; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #f0fdf4; display: flex; flex-direction: column;">
+                <h3 style="margin: 0 0 10px 0; color:#059669;">✅ Completed Jobs (History)</h3>
+                <div class="search-area" style="margin-bottom: 8px;">
+                    <input id="completedSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Completed')" />
+                    <button onclick="loadReportsList(document.getElementById('completedSearch').value, 'Completed')">🔍</button>
+                </div>
+                <div id="completedJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1;">
+                    <div style="padding:10px; text-align:center; color:#666;">... Loading Completed Jobs ...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="panel form" style="display: none;">
       
       <div class="report-search-section">
-        <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Reports Folder (Cloud Save)</h2>
+        <h2 style="font-size: 16px; text-align: left; margin-bottom: 8px; color:#2563eb;">Active Job Card</h2>
         
-        <div class="search-area">
-          <input id="reportSearch" type="text" placeholder="Challan / Part / Customer से खोजें" />
-          <button id="searchBtn" disabled>🔍</button>
-        </div>
-        
-        <div id="reportListContainer" class="report-list-container">
-          <div style="padding:10px; text-align:center;">Login is required to load reports from Cloud.</div>
-        </div>
+        <div style="display: none;"><label>Job Status</label><input id="statusField" type="text" value="Running" readonly></div>
         
         <div class="report-actions-bottom">
           <button id="newReportBtn" class="secondary" style="background:#10b981;">➕ New Job Card</button>
           <button id="saveReport" disabled>💾 Save New Report</button>
+          <button id="completeReportBtn" class="secondary" style="background:#059669;" disabled>✅ Mark as Completed</button> 
           <button id="deleteReport" class="delete-btn" disabled>🗑️ Delete</button>
         </div>
         <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Customer/Part/Challan No से Save होगी।</div>
@@ -383,7 +509,7 @@
       </div>
     </div>
 
-    <div class="preview-wrap">
+    <div class="preview-wrap" style="display: none;">
       <div class="panel" style="width:100%; padding:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div class="small">ISO 9001:2015</div>
@@ -504,7 +630,7 @@
       { op: "Shot Blasting", color: 'N/A' },
       { op: "Final Inspection", color: 'N/A' },
       { op: "Packing & Dispatch", color: 'N/A' },
-      { op: "Spare Operation", color: 'N/A' }, // Added one more for padding
+      { op: "Spare Operation", color: 'N/A' }, 
     ];
     
     // --- Core Logic Functions - getCurrentPredefinedOperations ---
@@ -689,12 +815,15 @@
       const data = {};
       jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
       
+      // 🆕 New: Get status field
+      data.status = document.getElementById('statusField')?.value || 'Running'; 
+      
       const cleanCustomer = data.customerName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanPart = data.partDesc.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       
       data.uniqueId = `${cleanCustomer.substring(0, 3)}_${cleanPart}_${cleanChallan}`;
-      if(data.uniqueId.length < 5) {
+      if(data.uniqueId.length < 5 || data.uniqueId.length > 50) {
            data.uniqueId = `NEW_${Date.now()}`;
       }
       data.uniqueId = data.uniqueId.toUpperCase();
@@ -717,6 +846,7 @@
         const observation = observationValues.join('; ').trim(); 
 
         const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
+        // Only include non-empty rows, unless it's a non-spare operation
         if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '') return;
         
         rows.push({
@@ -727,7 +857,7 @@
           toTime: group.querySelector('input[data-field="toTime"]').value.trim(),
           qty: group.querySelector('input[data-field="qty"]').value.trim(),
           inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
-          operatorChecked: '', // Removed from form, kept blank in data
+          operatorChecked: '', 
           supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), 
           operation: operation, 
         });
@@ -737,7 +867,7 @@
       return data;
     }
 
-    // --- Utility Functions (UNCHANGED) ---
+    // --- Utility Functions ---
 
     function setFormData(data) {
         jobFields.forEach(f => {
@@ -746,13 +876,27 @@
                  el.value = data[f] || ''; 
             }
         });
+        
+        // 🆕 New: Set the status for the active job
+        const statusEl = document.getElementById('statusField');
+        if (statusEl) {
+            const currentStatus = data.status || 'Running';
+            statusEl.value = currentStatus;
+            document.getElementById('completeReportBtn').textContent = (currentStatus === 'Completed') ? '✅ Job is Completed' : '✅ Mark as Completed';
+            
+            // Re-enable/disable based on status and user role via updateActionButtons
+            // document.getElementById('completeReportBtn').disabled = currentStatus === 'Completed'; 
+        }
+
+
         currentActiveReportId = data.uniqueId || null;
         document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
         
         document.getElementById('saveReport').textContent = currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
-        document.getElementById('deleteReport').disabled = currentActiveReportId.startsWith('NEW') || !window.auth.currentUser;
+        // document.getElementById('deleteReport').disabled logic is now in updateActionButtons
         
         updateRowInputs(data.rows || []); 
+        updateActionButtons(data);
     }
 
     function clearForm() {
@@ -777,6 +921,12 @@
         document.getElementById('baseBatch').value = 'BCB101';
         document.getElementById('topBatch').value = 'TCB202';
         
+        // 🆕 New: Reset status field
+        const statusEl = document.getElementById('statusField');
+        if (statusEl) statusEl.value = 'Running';
+        document.getElementById('completeReportBtn').textContent = '✅ Mark as Completed';
+        document.getElementById('completeReportBtn').disabled = true;
+
         currentActiveReportId = null;
         document.getElementById('currentReportId').textContent = `Active ID: -- New --`;
         document.getElementById('saveReport').textContent = '💾 Save New Report';
@@ -784,9 +934,10 @@
 
         updateRowInputs(); 
         applyPreview();
+        updateActionButtons(null);
     }
     
-    // --- CLOUD LOGIC FUNCTIONS (UNCHANGED) ---
+    // --- CLOUD LOGIC FUNCTIONS ---
 
     async function handleSaveReport() {
         if (!window.auth.currentUser) {
@@ -807,7 +958,12 @@
             document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
             document.getElementById('saveReport').textContent = '💾 Update Report';
             alert(`✅ रिपोर्ट सफलतापूर्वक क्लाउड पर सेव/अपडेट हो गई है। ID: ${currentActiveReportId}`);
-            window.loadReportsList(); 
+            
+            // Reload job lists on home page
+            window.loadReportsList('', 'Running'); 
+            window.loadReportsList('', 'Completed'); 
+            
+            updateActionButtons(data);
         } catch (e) {
             console.error(e);
             alert(`❌ रिपोर्ट सेव करने में त्रुटि: ${e.message}`);
@@ -819,7 +975,8 @@
             alert("❌ यह एक नई रिपोर्ट है, इसे डिलीट नहीं किया जा सकता।");
             return;
         }
-        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं?`)) {
+        // RBAC Check is inside cloudDeleteReport
+        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं? (यह क्रिया केवल Admin ही कर सकते हैं)`)) {
             return;
         }
         
@@ -827,17 +984,24 @@
             await window.cloudDeleteReport(currentActiveReportId);
             alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक डिलीट हो गई है।`);
             clearForm();
-            window.loadReportsList();
+            // Reload job lists on home page
+            window.loadReportsList('', 'Running'); 
+            window.loadReportsList('', 'Completed');
         } catch (e) {
             console.error(e);
             alert(`❌ रिपोर्ट डिलीट करने में त्रुटि: ${e.message}`);
         }
     }
 
-    window.loadReportsList = async (query = '') => {
+    // --- UPDATED: loadReportsList now takes a status filter ---
+    window.loadReportsList = async (query = '', statusFilter = 'Running') => {
         try {
-            const reports = await window.cloudLoadReports(query);
-            const container = document.getElementById('reportListContainer');
+            const reports = await window.cloudLoadReports(query, statusFilter);
+            
+            // Determine which container to use (Running Jobs or Completed Jobs)
+            const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
+            const container = document.getElementById(containerId);
+            
             container.innerHTML = '';
             
             if (reports.length === 0) {
@@ -848,6 +1012,7 @@
             reports.forEach(report => {
                 const item = document.createElement('div');
                 item.className = 'report-item';
+                // Highlight if it's the currently loaded active report
                 if (report.uniqueId === currentActiveReportId) {
                      item.classList.add('selected');
                 }
@@ -856,21 +1021,66 @@
                     <span>${report.customerName} - ${report.partDesc}</span>
                     <span style="font-size:10px; color:#666;">${report.challan}</span>
                 `;
-                item.addEventListener('click', () => handleLoadReport(report));
+                item.addEventListener('click', () => {
+                    handleLoadReport(report);
+                    showView('form'); // 🆕 Switch to form view on click
+                });
                 container.appendChild(item);
             });
         } catch (e) {
-            console.error("Error loading reports:", e);
-            document.getElementById('reportListContainer').innerHTML = `<div style="padding:10px; text-align:center; color:red;">रिपोर्ट्स लोड करने में त्रुटि: ${e.message}</div>`;
+            console.error(`Error loading ${statusFilter} reports:`, e);
+            const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
+            const container = document.getElementById(containerId);
+            if(container) container.innerHTML = `<div style="padding:10px; text-align:center; color:red;">रिपोर्ट्स लोड करने में त्रुटि: ${e.message}</div>`;
         }
     };
 
     function handleLoadReport(reportData) {
         setFormData(reportData);
+        // Deselect all and select the currently loaded report item in the list
         document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
         const selectedItem = document.querySelector(`.report-item[data-id="${reportData.uniqueId}"]`);
         if (selectedItem) {
             selectedItem.classList.add('selected');
+        }
+    }
+    
+    // --- NEW FUNCTION: Mark Job as Completed ---
+    async function handleCompleteReport() {
+        if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
+            alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप Completed मार्क करना चाहते हैं।");
+            return;
+        }
+        
+        if (document.getElementById('statusField').value === 'Completed') {
+            alert("❌ यह जॉब पहले से ही Completed मार्क है।");
+            return;
+        }
+        
+        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को 'Completed' मार्क करना चाहते हैं? (यह 'Completed Jobs' फोल्डर में चली जाएगी)`)) {
+            return;
+        }
+        
+        try {
+            const data = getFormData();
+            data.status = 'Completed'; // Set status to Completed
+            
+            // Save the updated status to the cloud
+            await window.cloudSaveReport(data, data.uniqueId);
+            
+            // Update UI elements
+            document.getElementById('statusField').value = 'Completed';
+            document.getElementById('completeReportBtn').textContent = '✅ Job is Completed';
+            
+            alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक 'Completed' मार्क हो गई है।`);
+            
+            // Reload job lists and update buttons
+            window.loadReportsList('', 'Running'); 
+            window.loadReportsList('', 'Completed'); 
+            updateActionButtons(data);
+        } catch (e) {
+            console.error(e);
+            alert(`❌ रिपोर्ट को 'Completed' मार्क करने में त्रुटि: ${e.message}`);
         }
     }
 
@@ -981,7 +1191,6 @@
         
         if (currentOutputRows < requiredLength) {
             for (let i = 0; i < requiredLength - currentOutputRows; i++) {
-                // Now only 10 columns instead of 11
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
                 tbody.appendChild(tr);
@@ -996,7 +1205,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (UPDATED: Filename and Row Count) ---
+    // --- generatePdfWithAutoTable (UPDATED: Row Count and Height) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         const data = getFormData();
@@ -1005,9 +1214,9 @@
         
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const pageHeight = pdf.internal.pageSize.getHeight(); // A4 is 297mm
+        const pageHeight = pdf.internal.pageSize.getHeight(); 
         const bottomMargin = 10;
-        const availablePageEnd = pageHeight - bottomMargin; // ~287 mm
+        const availablePageEnd = pageHeight - bottomMargin; 
         let yOffset = 15; 
 
         // --- Header and Format No. ---
@@ -1015,7 +1224,7 @@
         pdf.text("JOB CARD / ROUTE CARD", 105, yOffset, null, null, "center");
         yOffset += 7;
 
-        pdf.setFontSize(6.5); // Fixed Font size for details
+        pdf.setFontSize(6.5); 
         pdf.text(`Format No: WT/PDR/11  |  REV. NO: 01  |  REV. DATE: 01.09.2025`, 105, yOffset, null, null, "center");
         yOffset += 5;
         
@@ -1106,7 +1315,7 @@
                 r.toTime || '',
                 r.qty || '',
                 r.inspectionStatus || '',
-                r.supervisorSign || '' // Combined signature field
+                r.supervisorSign || '' 
             ]);
             globalSr++;
         });
@@ -1118,10 +1327,6 @@
         
         
         // Define row heights based on your requirement (5mm for Sr No 1, 18mm for others)
-        const rowHeights = mainBody.map((row, index) => {
-            return index === 0 ? 5.0 : 18.0; 
-        });
-
         
         pdf.autoTable({
             startY: yOffset,
@@ -1134,7 +1339,7 @@
                 lineColor: 0, 
                 lineWidth: 0.2, 
                 valign: 'middle', 
-                minCellHeight: 18.0 /* Default Min Height */
+                minCellHeight: 18.0 
             },
             headStyles: { 
                 fillColor: [200, 200, 200], 
@@ -1159,10 +1364,8 @@
             // Hook to handle individual row height
             didParseCell: (data) => {
                 if (data.section === 'body' && data.row.index === 0) {
-                     // Set 5mm height for the first row in PDF
                      data.cell.styles.minCellHeight = 5.0; 
                 } else if (data.section === 'body') {
-                     // Set 18mm height for all other rows in PDF
                      data.cell.styles.minCellHeight = 18.0; 
                 }
                 
@@ -1178,13 +1381,13 @@
         // Calculate dynamic footer start Y
         let footerY = Math.max(pdf.autoTable.previous.finalY + 3, availablePageEnd - 10);
         
-        pdf.setFontSize(6.5); // Fixed Font Size
+        pdf.setFontSize(6.5); 
         pdf.text(`Verified By: ${v('verifiedBy')}`, 10, footerY);
         pdf.text(`Approved By: ${v('approvedBy')}`, 200, footerY, null, null, 'right');
         footerY += 4;
         pdf.text(`Note - ${v('notes')}`, 10, footerY);
         
-        // ✅ NEW: Custom Filename Logic
+        // Custom Filename Logic
         const custNameClean = v('customerName').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
         const partNoClean = v('partDesc').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 10);
         const challanClean = v('challan').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
@@ -1193,7 +1396,7 @@
         pdf.save(fileName);
     }
 
-    // --- Event Listeners (COMPLETED) ---
+    // --- Event Listeners ---
     
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
     document.getElementById('printBtn').addEventListener('click', () => {
@@ -1208,11 +1411,21 @@
 
     document.getElementById('saveReport').addEventListener('click', handleSaveReport);
     document.getElementById('deleteReport').addEventListener('click', handleDeleteReport);
-    document.getElementById('newReportBtn').addEventListener('click', clearForm);
     
-    document.getElementById('reportSearch').addEventListener('input', (e) => window.loadReportsList(e.target.value));
-    document.getElementById('searchBtn').addEventListener('click', () => window.loadReportsList(document.getElementById('reportSearch').value));
-
+    // 🆕 New Event Listeners for View Switching and Status
+    document.getElementById('homeViewBtn').addEventListener('click', () => showView('home'));
+    document.getElementById('formViewBtn').addEventListener('click', () => showView('form'));
+    document.getElementById('newJobFromHome').addEventListener('click', () => {
+        clearForm();
+        showView('form');
+    });
+    document.getElementById('completeReportBtn').addEventListener('click', handleCompleteReport); 
+    
+    document.getElementById('newReportBtn').addEventListener('click', () => {
+        clearForm();
+        showView('form');
+    });
+    // --- End Event Listeners ---
 
     document.addEventListener('DOMContentLoaded', () => {
         clearForm(); 
