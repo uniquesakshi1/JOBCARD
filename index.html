@@ -10,7 +10,6 @@
   <script type="module">
         // --- FIREBASE CONFIGURATION ---
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        // Simplified imports: Removed getDoc
         import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         
@@ -33,7 +32,8 @@
         let currentView = 'home'; 
 
         // --- Full Access Control Function (SIMPLIFIED) ---
-        function updateActionButtons(reportData) {
+        // 🛠️ FIX: Defining globally to resolve 'is not defined' error.
+        window.updateActionButtons = function(reportData) {
             const isReportLoaded = reportData !== null && !currentActiveReportId.startsWith('NEW');
             const isCompleted = document.getElementById('statusField')?.value === 'Completed';
             
@@ -52,7 +52,7 @@
             document.getElementById('applyBtn').disabled = !isLoggedIn;
             document.getElementById('updateOpsBtn').disabled = !isLoggedIn;
 
-            document.getElementById('currentReportId').textContent = `Active ID: ${reportData ? reportData.uniqueId : '-- New --'}`;
+            document.getElementById('currentReportId').textContent = `Active ID: ${reportData ? (reportData.uniqueId || '-- New --') : '-- New --'}`;
             
             if (isReportLoaded && isLoggedIn) {
                 document.getElementById('saveReport').textContent = '💾 Update Report';
@@ -61,7 +61,7 @@
             } else {
                  document.getElementById('saveReport').textContent = '⚠️ Log In to Save';
             }
-        }
+        };
 
         // --- AUTHENTICATION & CLOUD FUNCTIONS ---
         window.handleAuthAction = async (actionType) => {
@@ -117,7 +117,9 @@
                 currentUserRole = 'logged_out';
             }
             
-            updateActionButtons(currentActiveReportId ? getFormData() : null);
+            // Check if active report ID is set, if not pass null
+            const activeData = currentActiveReportId ? getFormData() : null;
+            window.updateActionButtons(activeData);
         };
 
         onAuthStateChanged(window.auth, (user) => {
@@ -855,7 +857,7 @@
         document.getElementById('saveReport').textContent = currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
         
         updateRowInputs(data.rows || []); 
-        updateActionButtons(data);
+        window.updateActionButtons(data); // Using global function
     }
 
     function clearForm() {
@@ -892,7 +894,7 @@
 
         updateRowInputs(); 
         applyPreview();
-        updateActionButtons(null);
+        window.updateActionButtons(null); // Using global function
     }
     
     // --- CLOUD LOGIC FUNCTIONS ---
@@ -920,7 +922,7 @@
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             
-            updateActionButtons(data);
+            window.updateActionButtons(data); // Using global function
         } catch (e) {
             console.error(e);
             alert(`❌ रिपोर्ट सेव करने में त्रुटि: ${e.message}`);
@@ -1027,7 +1029,7 @@
             
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
-            updateActionButtons(data);
+            window.updateActionButtons(data); // Using global function
         } catch (e) {
             console.error(e);
             alert(`❌ रिपोर्ट को 'Completed' मार्क करने में त्रुटि: ${e.message}`);
