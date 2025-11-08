@@ -58,6 +58,7 @@
             document.getElementById('saveReport').disabled = !isLoggedIn;
             document.getElementById('deleteReport').disabled = !(isLoggedIn && isReportLoaded);
             document.getElementById('completeReportBtn').disabled = !(isReportLoaded && isLoggedIn && !isCompleted);
+            // document.getElementById('sendReportBtn').disabled = !(isLoggedIn && isReportLoaded); // REMOVED: Send Report Button
 
             // FORM Inputs: All inputs enabled if logged in
             document.querySelectorAll('.form input, .form select, .form button:not(#loginButton, #signUpButton, #logoutButton, #homeViewBtn, #formViewBtn, #newJobFromHome)').forEach(el => {
@@ -172,6 +173,7 @@
                 }
             });
 
+            // reports को updatedAt के आधार पर छाँटें (नवीनतम पहले)
             return reports.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         };
 
@@ -234,7 +236,7 @@
     } 
     h2 { text-align:center; margin:0 0 8px 0; font-size:18px; }
     label { display:block; font-size:13px; margin-top:8px; }
-    input[type="text"], input[type="date"], select { width:100%; padding:6px 8px; margin-top:4px; box-sizing:border-box; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"], input[type="date"], input[type="email"], select { width:100%; padding:6px 8px; margin-top:4px; box-sizing:border-box; border: 1px solid #ccc; border-radius: 4px; }
     .top-grid { display:flex; gap:8px; }
     .top-grid > div { flex:1; }
     .actions { display:flex; gap:8px; margin-top:8px; }
@@ -259,6 +261,7 @@
         line-height: 1.4; 
     } 
     
+    /* Column 4 (Observation) should be smaller now */
     #pvTable td:nth-child(5) { 
         font-size: 9px; 
         line-height: 1.2;
@@ -286,10 +289,79 @@
     .report-search-section { border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; }
     .search-area { display: flex; gap: 8px; margin-bottom: 8px; }
     .report-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; }
-    .report-item { padding: 6px 8px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; font-size: 13px; }
-    .report-item.selected { background: #dbeafe; font-weight: bold; border-left: 5px solid #2563eb; padding-left: 3px; }
-    .report-item:hover { background: #f0f0f0; }
-    .report-actions-bottom { display: flex; gap: 8px; margin-top: 10px; justify-content: space-between; }
+    
+    /* --- New Styles for Customer/Month Grouping in Home View --- */
+    .customer-group, .month-group {
+        border: 1px solid #e5e7eb; /* light gray border */
+        margin-bottom: 10px;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .customer-header, .month-header {
+        background: #f3f4f6; /* very light gray background */
+        padding: 8px 10px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+        font-size: 14px;
+        color: #1f2937;
+        user-select: none; /* Prevent text selection on click */
+    }
+    .month-header {
+        background: #f9fafb; /* slightly lighter for month */
+        padding-left: 20px;
+        font-size: 13px;
+    }
+    .customer-header:hover, .month-header:hover {
+        background: #e5e7eb;
+    }
+    .report-list-item {
+        padding: 6px 15px 6px 30px; /* Indentation for item */
+        border-bottom: 1px dashed #eee;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+        font-size: 13px;
+        background: white;
+    }
+    .report-list-item:hover {
+        background: #f7f7f7;
+    }
+    .report-list-item.selected { 
+        background: #dbeafe; 
+        font-weight: bold; 
+        border-left: 3px solid #2563eb; 
+        padding-left: 27px;
+    }
+    .folder-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+    .folder-content.expanded {
+        max-height: 2000px; /* Enough height for expansion */
+        transition: max-height 0.5s ease-in;
+    }
+    /* Arrow rotation for folder icon */
+    .toggle-icon {
+        transition: transform 0.3s;
+    }
+    .toggle-icon.expanded {
+        transform: rotate(90deg);
+    }
+    /* Hide the original list item styles (in case of conflict) */
+    .report-item {
+        display: none !important;
+    }
+    
+    /* End of New Styles for Customer/Month Grouping */
+
+
     .full-width-grid { grid-template-columns: 1fr; } 
     .operator-supervisor-grid { 
         display: grid; 
@@ -366,7 +438,8 @@
             padding: 4px 5px; 
             line-height: 1.4; 
         } 
-        #pvTable td:nth-child(5) { font-size: 9px; }
+        /* Ensure Observation column has appropriate styles if needed */
+        #pvTable td:nth-child(5) { font-size: 9px; } 
     }
   </style>
 </head>
@@ -409,7 +482,7 @@
                     <input id="runningSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Running')" />
                     <button onclick="loadReportsList(document.getElementById('runningSearch').value, 'Running')">🔍</button>
                 </div>
-                <div id="runningJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1;">
+                <div id="runningJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1; border: none; padding: 0;">
                     <div style="padding:10px; text-align:center; color:#666;">... Loading Running Jobs ...</div>
                 </div>
                 <div style="margin-top: 10px; text-align: center;">
@@ -423,7 +496,7 @@
                     <input id="completedSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Completed')" />
                     <button onclick="loadReportsList(document.getElementById('completedSearch').value, 'Completed')">🔍</button>
                 </div>
-                <div id="completedJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1;">
+                <div id="completedJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1; border: none; padding: 0;">
                     <div style="padding:10px; text-align:center; color:#666;">... Loading Completed Jobs ...</div>
                 </div>
             </div>
@@ -450,6 +523,7 @@
       <label>Customer Name
         <input id="customerName" type="text" placeholder="Customer name" value="Star Engineering" />
       </label>
+      
       <div class="top-grid">
         <div><label>Order/Challan Qty<input id="orderQty" type="text" placeholder="Qty" value="1000 Pcs" /></label></div>
         <div><label>Challan No/Date<input id="challan" type="text" placeholder="No / Date" value="CH/2508/01 | 01.09.2025" /></label></div>
@@ -540,14 +614,13 @@
             <tr>
               <th style="width:4%">Sr No</th>
               <th style="width:10%">Date/Shift</th>
-              <th style="width:10%">Operation</th>
-              <th style="width:25%">Specifications</th> 
-              <th style="width:14%">Observation</th>
-              <th style="width:6%">From Time</th>
-              <th style="width:6%">To Time</th>
-              <th style="width:6%">Qty</th>
-              <th style="width:10%">Inspection OK/NOK</th>
-              <th style="width:15%">Operator/Supervisor/QA Signature</th> </tr>
+              <th style="width:12%">Operation</th>
+              <th style="width:28%">Specifications</th> 
+              <th style="width:18%">Observation</th>
+              <th style="width:7%">From Time</th>
+              <th style="width:7%">To Time</th>
+              <th style="width:7%">Inspection OK/NOK</th>
+              <th style="width:16%">Operator/Supervisor/QA Signature</th> </tr>
           </thead>
           <tbody id="pvRows"></tbody>
         </table>
@@ -570,7 +643,8 @@
 
   <script>
     let currentActiveReportId = null; 
-    const jobFields = ['customerName','orderQty','challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
+    // UPDATED: 'customerWhatsapp' removed from jobFields
+    const jobFields = ['customerName', 'orderQty','challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
     
     // --- SPECIFICATIONS (UNCHANGED) ---
     const SPECIFICATIONS = {
@@ -677,7 +751,7 @@
         return ops; 
     }
 
-    // --- updateRowInputs (UNCHANGED) ---
+    // --- updateRowInputs (UPDATED: QTY field removed) ---
     function updateRowInputs(savedRows = []) {
         const predefinedOperations = getCurrentPredefinedOperations();
         const rowsInputContainer = document.getElementById('rowsInput');
@@ -763,7 +837,7 @@
                         <label>Date/Shift</label>
                         <input data-field="dateShift" type="text" placeholder="Date/Shift" value="${savedData.dateShift || ''}" />
                     </div>
-                    <div><label>Qty (Pcs)</label><input data-field="qty" type="text" placeholder="Qty" value="${savedData.qty || ''}" /></div>
+                    <div>&nbsp;</div>
                 </div>
                 <div class="row-detail-grid">
                     <div><label>From Time</label><input data-field="fromTime" type="text" placeholder="From T." value="${savedData.fromTime || ''}" /></div>
@@ -793,7 +867,7 @@
         applyPreview(); 
     }
 
-    // --- getFormData (UNCHANGED) ---
+    // --- getFormData (UPDATED: 'customerWhatsapp' removed and QTY saving logic removed) ---
     function getFormData() {
       const data = {};
       jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
@@ -836,7 +910,7 @@
           observation: observation, 
           fromTime: group.querySelector('input[data-field="fromTime"]').value.trim(),
           toTime: group.querySelector('input[data-field="toTime"]').value.trim(),
-          qty: group.querySelector('input[data-field="qty"]').value.trim(),
+          qty: '', // Qty field removed, saving as empty string to maintain schema if needed
           inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
           operatorChecked: '', 
           supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), 
@@ -848,7 +922,7 @@
       return data;
     }
 
-    // --- Utility Functions (UNCHANGED) ---
+    // --- Utility Functions (UPDATED: 'customerWhatsapp' removed from clearForm) ---
 
     function setFormData(data) {
         jobFields.forEach(f => {
@@ -869,7 +943,7 @@
         currentActiveReportId = data.uniqueId || null;
         document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
         
-        document.getElementById('saveReport').textContent = currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
+        document.getElementById('saveReport').textContent = currentActiveReportId && currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
         
         updateRowInputs(data.rows || []); 
         window.updateActionButtons(data); // Using global function
@@ -878,14 +952,17 @@
     function clearForm() {
         jobFields.forEach(f => {
             const el = document.getElementById(f);
-            if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+            if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.type === 'email')) {
                  el.value = ''; 
             } else if (el && el.tagName === 'SELECT') {
                  el.value = el.options[0].value;
             }
         });
         
+        // Resetting default values
         document.getElementById('customerName').value = "Star Engineering";
+        // REMOVED: document.getElementById('customerWhatsapp').value = "+919999999999";
+        document.getElementById('orderQty').value = "1000 Pcs";
         document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
         document.getElementById('batchNo').value = "250819"; 
         document.getElementById('verifiedBy').value = "SAKSHI CHAVHAN";
@@ -906,13 +983,14 @@
         document.getElementById('currentReportId').textContent = `Active ID: -- New --`;
         document.getElementById('saveReport').textContent = '💾 Save New Report';
         document.getElementById('deleteReport').disabled = true;
+        // document.getElementById('sendReportBtn').disabled = true; // REMOVED
 
         updateRowInputs(); 
         applyPreview();
         window.updateActionButtons(null); // Using global function
     }
     
-    // --- CLOUD LOGIC FUNCTIONS ---
+    // --- CLOUD LOGIC FUNCTIONS (UNCHANGED) ---
 
     async function handleSaveReport() {
         if (!window.auth.currentUser) {
@@ -934,6 +1012,7 @@
             document.getElementById('saveReport').textContent = '💾 Update Report';
             alert(`✅ रिपोर्ट सफलतापूर्वक क्लाउड पर सेव/अपडेट हो गई है। ID: ${currentActiveReportId}`);
             
+            // Reload lists to show updated data and grouping
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             
@@ -966,7 +1045,8 @@
             alert(`❌ रिपोर्ट डिलीट करने में त्रुटि: ${e.message}`);
         }
     }
-
+    
+    // --- UPDATED: loadReportsList (UNCHANGED) ---
     window.loadReportsList = async (query = '', statusFilter = 'Running') => {
         try {
             const reports = await window.cloudLoadReports(query, statusFilter);
@@ -981,23 +1061,112 @@
                  return;
             }
             
+            // --- 1. Grouping Logic: Customer-wise and then Month-wise ---
+            const groupedReports = {}; // { customerName: { monthYear: [reports] } }
+            const monthNames = ["जनवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितम्बर", "अक्टूबर", "नवम्बर", "दिसम्बर"];
+            
             reports.forEach(report => {
-                const item = document.createElement('div');
-                item.className = 'report-item';
-                if (report.uniqueId === currentActiveReportId) {
-                     item.classList.add('selected');
+                // Determine the correct date for sorting/grouping (updatedAt is preferred)
+                const date = new Date(report.updatedAt || report.timestamp);
+                
+                // Construct MonthYear Key (e.g., "जनवरी 2025")
+                const monthYearKey = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+                
+                // Construct Customer Key
+                const customerKey = report.customerName.trim() || 'No Customer Name';
+                
+                if (!groupedReports[customerKey]) {
+                    groupedReports[customerKey] = {};
                 }
-                item.dataset.id = report.uniqueId;
-                item.innerHTML = `
-                    <span>${report.customerName} - ${report.partDesc}</span>
-                    <span style="font-size:10px; color:#666;">${report.challan}</span>
-                `;
-                item.addEventListener('click', () => {
-                    handleLoadReport(report);
-                    showView('form'); 
-                });
-                container.appendChild(item);
+                if (!groupedReports[customerKey][monthYearKey]) {
+                    groupedReports[customerKey][monthYearKey] = [];
+                }
+                groupedReports[customerKey][monthYearKey].push(report);
             });
+            
+            // --- 2. Rendering the Grouped Structure ---
+            for (const customerName in groupedReports) {
+                const customerGroupDiv = document.createElement('div');
+                customerGroupDiv.className = 'customer-group';
+                
+                const customerHeader = document.createElement('div');
+                customerHeader.className = 'customer-header';
+                
+                // Calculate total jobs for this customer
+                let totalJobs = 0;
+                for(const month in groupedReports[customerName]) {
+                    totalJobs += groupedReports[customerName][month].length;
+                }
+                
+                customerHeader.innerHTML = `${customerName} <span style="font-size: 11px; margin-left: 10px; font-weight: normal; color: #4b5563;">(${totalJobs} Jobs Total)</span> <span class="toggle-icon">▶</span>`;
+                customerGroupDiv.appendChild(customerHeader);
+
+                const customerContent = document.createElement('div');
+                customerContent.className = 'folder-content'; 
+                customerGroupDiv.appendChild(customerContent);
+                
+                // Toggle logic for Customer Folder
+                customerHeader.addEventListener('click', () => {
+                    customerContent.classList.toggle('expanded');
+                    customerHeader.querySelector('.toggle-icon').classList.toggle('expanded');
+                });
+                
+                // Sort months from newest to oldest
+                const sortedMonths = Object.keys(groupedReports[customerName]).sort((a, b) => {
+                     // Convert month/year string back to a comparable date object
+                     const dateA = new Date(a.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
+                     const dateB = new Date(b.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
+                     return dateB - dateA; // Newest first
+                });
+
+
+                for (const monthYearKey of sortedMonths) {
+                    const monthGroupDiv = document.createElement('div');
+                    monthGroupDiv.className = 'month-group';
+                    
+                    const monthHeader = document.createElement('div');
+                    monthHeader.className = 'month-header';
+                    monthHeader.innerHTML = `${monthYearKey} (${groupedReports[customerName][monthYearKey].length} Jobs) <span class="toggle-icon">▶</span>`;
+                    customerContent.appendChild(monthHeader);
+                    
+                    const monthContent = document.createElement('div');
+                    monthContent.className = 'folder-content'; 
+                    customerContent.appendChild(monthContent);
+                    
+                    // Toggle logic for Month Folder
+                    monthHeader.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent the parent Customer folder from closing
+                        monthContent.classList.toggle('expanded');
+                        monthHeader.querySelector('.toggle-icon').classList.toggle('expanded');
+                    });
+                    
+                    // Render individual reports (sorted newest first by cloudLoadReports)
+                    groupedReports[customerName][monthYearKey].forEach(report => {
+                        const item = document.createElement('div');
+                        item.className = 'report-list-item';
+                        if (report.uniqueId === currentActiveReportId) {
+                             item.classList.add('selected');
+                        }
+                        item.dataset.id = report.uniqueId;
+                        item.innerHTML = `
+                            <span>${report.partDesc} <span style="font-weight: normal; color:#6b7280; margin-left: 8px;">(Batch: ${report.batchNo})</span></span>
+                            <span style="font-size:10px; color:#666;">${report.challan}</span>
+                        `;
+                        item.addEventListener('click', () => {
+                            handleLoadReport(report);
+                            showView('form'); 
+                        });
+                        monthContent.appendChild(item);
+                    });
+                }
+                container.appendChild(customerGroupDiv);
+                
+                // Optionally expand the first customer/month group by default
+                // if (container.children.length === 1) {
+                //     customerContent.classList.add('expanded');
+                //     customerHeader.querySelector('.toggle-icon').classList.add('expanded');
+                // }
+            }
         } catch (e) {
             console.error(`Error loading ${statusFilter} reports:`, e);
             const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
@@ -1006,12 +1175,30 @@
         }
     };
 
+
     function handleLoadReport(reportData) {
         setFormData(reportData);
-        document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
-        const selectedItem = document.querySelector(`.report-item[data-id="${reportData.uniqueId}"]`);
+        
+        // Remove 'selected' class from all report items
+        document.querySelectorAll('.report-list-item').forEach(item => item.classList.remove('selected'));
+        
+        // Add 'selected' class to the newly loaded report item
+        const selectedItem = document.querySelector(`.report-list-item[data-id="${reportData.uniqueId}"]`);
         if (selectedItem) {
             selectedItem.classList.add('selected');
+            
+            // Ensure the parent folders are expanded when the item is loaded
+            let currentParent = selectedItem.closest('.folder-content');
+            while(currentParent) {
+                currentParent.classList.add('expanded');
+                const header = currentParent.previousElementSibling;
+                if(header && header.querySelector('.toggle-icon')) {
+                    header.querySelector('.toggle-icon').classList.add('expanded');
+                }
+                currentParent = currentParent.closest('.folder-content:not(.month-group .folder-content)');
+                if (currentParent && currentParent.classList.contains('customer-group')) break;
+                if (currentParent === selectedItem.closest('.customer-group .folder-content')) currentParent = null; 
+            }
         }
     }
     
@@ -1051,9 +1238,38 @@
         }
     }
 
+    // --- REMOVED: Dummy Function for Send Report ---
+    /*
+    function handleSendReport() {
+        if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
+            alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप भेजना चाहते हैं।");
+            return;
+        }
+
+        const data = getFormData();
+        const whatsapp = data.customerWhatsapp;
+        
+        let message = `✅ Report ID ${currentActiveReportId} (Customer: ${data.customerName}) को भेजने की प्रक्रिया शुरू हो गई है।\n`;
+        
+        // Email logic removed
+        message += `\n❌ ईमेल पता हटा दिया गया है, ईमेल नहीं भेजा जाएगा।`;
+
+
+        if (whatsapp && whatsapp.trim() !== '') {
+            message += `\n\n💬 WhatsApp: ${whatsapp} पर संदेश भेजने का अनुरोध (Backend Required).`;
+        } else {
+            message += `\n❌ WhatsApp नंबर खाली है, संदेश नहीं भेजा जाएगा।`;
+        }
+
+        message += `\n\n--- यह क्लाइंट-साइड लॉजिक है, असली भेजने के लिए आपको Firebase Cloud Functions या किसी अन्य सर्वर-साइड सेवा का उपयोग करना होगा।`;
+        
+        alert(message);
+    }
+    */
+
 
     // ------------------------------------------------------------------
-    // --- applyPreview (UNCHANGED) ---
+    // --- applyPreview (UNCHANGED as QTY column was already removed in original code) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1116,7 +1332,7 @@
                         else if (label.includes('Speed')) obsPrefix = 'S-';
                         else if (label.includes('Adhesion')) obsPrefix = 'A-';
                         else if (label.includes('Thickness')) obsPrefix = 'T-'; 
-                        else if (label.includes('Qty')) obsPrefix = 'Q-';
+                        else if (label.includes('Qty')) obsPrefix = 'Q-'; // Qty is saved in row data but not shown in a dedicated column now
                         
                         singleObservationString += `${obsPrefix}${value}${unitDisplay} `; 
                     }
@@ -1139,9 +1355,8 @@
                 <td style="font-size: 9px; line-height: 1.2;">${finalObservation}</td>
                 <td style="text-align:center">${r.fromTime || ''}</td>
                 <td style="text-align:center">${r.toTime || ''}</td>
-                <td style="text-align:center">${r.qty || ''}</td>
                 <td style="text-align:center; font-weight: bold;">${r.inspectionStatus || ''}</td> 
-                <td>${r.supervisorSign || ''}</td> `;
+                <td>${r.supervisorSign || ''}</td> `; // Qty column removed
 
             tr.innerHTML = rowContent;
             tbody.appendChild(tr);
@@ -1158,7 +1373,8 @@
         if (currentOutputRows < requiredLength) {
             for (let i = 0; i < requiredLength - currentOutputRows; i++) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
+                // Qty column removed, total 9 columns now
+                tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
                 tbody.appendChild(tr);
                 
                 const blankSr = globalSr + i;
@@ -1170,7 +1386,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (UNCHANGED) ---
+    // --- generatePdfWithAutoTable (UNCHANGED as QTY column was already removed in original code) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         const data = getFormData();
@@ -1229,7 +1445,7 @@
         
         const mainHeader = [
             'Sr No', 'Date/Shift', 'Operation', 'Specifications', 'Observation', 
-            'From Time', 'To Time', 'Qty', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'
+            'From Time', 'To Time', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'
         ];
         
         const mainBody = [];
@@ -1278,15 +1494,15 @@
                 finalObservation.trim(),
                 r.fromTime || '',
                 r.toTime || '',
-                r.qty || '',
-                r.inspectionStatus || '',
+                r.inspectionStatus || '', // Qty column removed
                 r.supervisorSign || '' 
             ]);
             globalSr++;
         });
         
         while (mainBody.length < requiredLength) {
-            mainBody.push([globalSr++, '', '', '', '', '', '', '', '', '']);
+            // Qty column removed (was 10th element)
+            mainBody.push([globalSr++, '', '', '', '', '', '', '', '']); 
         }
         
         pdf.autoTable({
@@ -1311,16 +1527,16 @@
                 fontSize: 6.5 
             },
             columnStyles: {
-                0: { cellWidth: 8, halign: 'center' }, 
-                1: { cellWidth: 15 }, 
-                2: { cellWidth: 18 }, 
-                3: { cellWidth: 40 }, 
-                4: { cellWidth: 28 }, 
-                5: { cellWidth: 10, halign: 'center' }, 
-                6: { cellWidth: 10, halign: 'center' }, 
-                7: { cellWidth: 10, halign: 'center' }, 
-                8: { cellWidth: 15, halign: 'center' }, 
-                9: { cellWidth: 26 } 
+                0: { cellWidth: 8, halign: 'center' }, // Sr No (4)
+                1: { cellWidth: 15 }, // Date/Shift (10)
+                2: { cellWidth: 18 }, // Operation (12)
+                3: { cellWidth: 45 }, // Specifications (28) -> Increased
+                4: { cellWidth: 32 }, // Observation (18) -> Increased
+                5: { cellWidth: 12, halign: 'center' }, // From Time (7) -> Increased
+                6: { cellWidth: 12, halign: 'center' }, // To Time (7) -> Increased
+                7: { cellWidth: 15, halign: 'center' }, // Inspection OK/NOK (7) -> Increased
+                8: { cellWidth: 33 } // Operator/Supervisor/QA Signature (16) -> Increased
+                // Total width is now 8+15+18+45+32+12+12+15+33 = 190 mm (A4 width is 210mm)
             },
             didParseCell: (data) => {
                 if (data.section === 'body' && data.row.index === 0) {
@@ -1354,7 +1570,7 @@
         pdf.save(fileName);
     }
 
-    // --- Event Listeners (UNCHANGED) ---
+    // --- Event Listeners (UPDATED: handleSendReport listener removed) ---
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
     document.getElementById('printBtn').addEventListener('click', () => {
         applyPreview(); 
@@ -1368,6 +1584,7 @@
 
     document.getElementById('saveReport').addEventListener('click', handleSaveReport);
     document.getElementById('deleteReport').addEventListener('click', handleDeleteReport);
+    // document.getElementById('sendReportBtn').addEventListener('click', handleSendReport); // REMOVED
     
     document.getElementById('homeViewBtn').addEventListener('click', () => showView('home'));
     document.getElementById('formViewBtn').addEventListener('click', () => showView('form'));
