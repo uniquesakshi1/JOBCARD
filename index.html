@@ -472,19 +472,19 @@
       
       <label>Verified By
         <select id="verifiedBy">
+            <option value="N/A" selected>N/A</option>
             <option value="SAKSHI CHAVHAN">SAKSHI CHAVHAN</option>
             <option value="KOMAL TAYADE">KOMAL TAYADE</option>
             <option value="MANOJ SHAH">MANOJ SHAH</option>
-            <option value="N/A">N/A</option>
         </select>
       </label>
       
       <label>Approved By
         <select id="approvedBy">
+            <option value="N/A" selected>N/A</option>
             <option value="ABHIJEET DHOKRAT">ABHIJEET DHOKRAT</option>
             <option value="MANOJ SHAH">MANOJ SHAH</option>
             <option value="SURAJ KUMAR">SURAJ KUMAR</option>
-            <option value="N/A">N/A</option>
         </select>
       </label>
       
@@ -575,15 +575,17 @@
     // UPDATED: Added orderQtyUnit to jobFields
     const jobFields = ['customerName', 'orderQty', 'orderQtyUnit', 'challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
     
+    // START: FIX 1 - Setting N/A as the primary default option
     const SUPERVISORS = [
+        "N/A", // Now the default selected option
         "MANOJ SHAH", 
         "SURAJ KUMAR", 
         "MOHAMMAD ANSARI", 
         "SAKSHI CHAVHAN", 
         "KOMAL TAYADE",
         "ABHIJEET DHOKRAT",
-        "N/A"
     ];
+    // END: FIX 1
 
     // --- TEMPERATURE SPECIFICATIONS (Ranges for Select Options) ---
     const TEMPERATURE_SPECS = {
@@ -646,7 +648,7 @@
       { op: "Spare Operation", color: 'N/A', order: 12 }, 
     ];
     
-    // --- getCurrentPredefinedOperations (Removes Spare Operation for Silver) ---
+    // --- getCurrentPredefinedOperations (MODIFIED: Ensures correct operation list size) ---
     function getCurrentPredefinedOperations() {
         const paintSelect = document.getElementById('paint');
         const paintType = paintSelect.value;
@@ -691,21 +693,7 @@
             { op: "Packing & Dispatch", color: 'N/A', order: ops.length + 2 }
         );
 
-        // --- NEW LOGIC: Prevent adding spare rows for Silver to stop at Dispatch (Row 9) ---
-        let totalRows = ops.length; // Silver: 9, Black: 10
-        const targetRows = 10; 
-
-        if (paintType === 'Silver') {
-            // No spare operations for Silver (Total 9 Ops)
-        } else if (paintType === 'Black') {
-            // Allow one spare operation to fill up to 11 rows if needed, or simply leave at 10. 
-            // Stick to 10 for consistency of black ops.
-        }
-        
-        // This ensures Silver has 9, Black has 10, and no extra 'Spare Operations' are added below 
-        // Packing & Dispatch unless specifically requested to hit a minimum table height.
-        // We will fill the preview table with blank rows instead of adding them to the input data structure.
-        
+        // The returned array will have 9 items for Silver, and 10 for Black.
         return ops; 
     }
 
@@ -1106,6 +1094,7 @@
             if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.type === 'email' || el.type === 'date' || el.type === 'time')) {
                  el.value = ''; 
             } else if (el && el.tagName === 'SELECT') {
+                 // Ensures select fields revert to the first option, which is now N/A or a placeholder
                  el.value = el.options[0]?.value; 
             }
         });
@@ -1117,8 +1106,10 @@
         document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
         document.getElementById('batchNo').value = "250819"; 
         
-        document.getElementById('verifiedBy').value = "SAKSHI CHAVHAN";
-        document.getElementById('approvedBy').value = "ABHIJEET DHOKRAT";
+        // START: FIX 2 - Setting default sign-off to "N/A"
+        document.getElementById('verifiedBy').value = "N/A";
+        document.getElementById('approvedBy').value = "N/A";
+        // END: FIX 2
         
         document.getElementById('notes').value = "P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion.";
         document.getElementById('paint').value = 'Black'; 
@@ -1373,7 +1364,7 @@
 
 
     // ------------------------------------------------------------------
-    // --- applyPreview (REVISED: Displaying Order Qty and Unit) ---
+    // --- applyPreview (REVISED: Dynamically sets requiredLength for 9/10 rows) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1415,7 +1406,12 @@
         
         const allRows = data.rows;
         let globalSr = 1; 
-        const requiredLength = 10; // Total 10 rows for table consistency
+        
+        // --- MODIFIED LOGIC: Set requiredLength based on paintType ---
+        // Silver needs 9 operations (4 pre + 3 coating + 2 post)
+        // Black needs 10 operations (4 pre + 4 coating + 2 post)
+        const requiredLength = (paintType === 'Silver') ? 9 : 10; 
+        // -------------------------------------------------------------
 
         allRows.forEach(r => {
             
@@ -1530,7 +1526,7 @@
         
         let currentOutputRows = tbody.querySelectorAll('tr').length;
         
-        // Fill remaining rows with empty rows up to 10
+        // Fill remaining rows with empty rows up to requiredLength (9 for Silver, 10 for Black)
         if (currentOutputRows < requiredLength) {
             for (let i = 0; i < requiredLength - currentOutputRows; i++) {
                 const tr = document.createElement('tr');
@@ -1546,7 +1542,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (REVISED: Time display is same as preview) ---
+    // --- generatePdfWithAutoTable (REVISED: Dynamically sets requiredLength for 9/10 rows) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         try {
@@ -1612,7 +1608,10 @@
             const mainBody = [];
             const allRows = data.rows;
             let globalSr = 1;
-            const requiredLength = 10;
+            
+            // --- MODIFIED LOGIC: Set requiredLength based on paintType for PDF ---
+            const requiredLength = (paintType === 'Silver') ? 9 : 10; 
+            // ----------------------------------------------------------------------
 
             allRows.forEach(r => {
                 
