@@ -9,13 +9,11 @@
   
   <script>
     // 🔒 SECURITY Enhancement: Disable Right Click and Developer Tools Access
-    document.addEventListener('contextmenu', event => event.preventDefault()); // Right Click Disable
+    document.addEventListener('contextmenu', event => event.preventDefault()); 
     document.onkeydown = function(e) {
-        // F12 (123) और Ctrl+Shift+I/C/J/K को ब्लॉक करता है
         if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J' || e.key === 'K'))) {
             return false;
         }
-        // Ctrl+U (View Source) को ब्लॉक करता है
         if (e.ctrlKey && e.key === 'u') {
             return false;
         }
@@ -37,30 +35,22 @@
             appId: "1:36117182109:web:3007d2193063100d3c4674"
         };
         
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         window.db = getFirestore(app);
         window.auth = getAuth(app); 
 
-        // 🛑 RBAC REMOVED: Assume full access for any logged-in user
         let currentUserRole = 'admin'; 
         let currentView = 'home'; 
 
-        // --- Full Access Control Function (SIMPLIFIED) ---
-        // 🛠️ FIX: Defining globally to resolve 'is not defined' error.
         window.updateActionButtons = function(reportData) {
-            const isReportLoaded = reportData !== null && !currentActiveReportId.startsWith('NEW');
+            const isReportLoaded = reportData && reportData.uniqueId && !reportData.uniqueId.startsWith('NEW_');
             const isCompleted = document.getElementById('statusField')?.value === 'Completed';
-            
-            // 🔓 All actions enabled for logged-in users (since role is 'admin' or logged_out)
             const isLoggedIn = currentUserRole !== 'logged_out';
 
             document.getElementById('saveReport').disabled = !isLoggedIn;
             document.getElementById('deleteReport').disabled = !(isLoggedIn && isReportLoaded);
             document.getElementById('completeReportBtn').disabled = !(isReportLoaded && isLoggedIn && !isCompleted);
-            // document.getElementById('sendReportBtn').disabled = !(isLoggedIn && isReportLoaded); // REMOVED: Send Report Button
 
-            // FORM Inputs: All inputs enabled if logged in
             document.querySelectorAll('.form input, .form select, .form button:not(#loginButton, #signUpButton, #logoutButton, #homeViewBtn, #formViewBtn, #newJobFromHome)').forEach(el => {
                 el.disabled = !isLoggedIn;
             });
@@ -68,7 +58,7 @@
             document.getElementById('applyBtn').disabled = !isLoggedIn;
             document.getElementById('updateOpsBtn').disabled = !isLoggedIn;
 
-            document.getElementById('currentReportId').textContent = `Active ID: ${reportData ? (reportData.uniqueId || '-- New --') : '-- New --'}`;
+            document.getElementById('currentReportId').textContent = `Active ID: ${reportData && reportData.uniqueId ? (reportData.uniqueId.startsWith('NEW') ? '-- New --' : reportData.uniqueId) : '-- New --'}`;
             
             if (isReportLoaded && isLoggedIn) {
                 document.getElementById('saveReport').textContent = '💾 Update Report';
@@ -79,7 +69,6 @@
             }
         };
 
-        // --- AUTHENTICATION & CLOUD FUNCTIONS ---
         window.handleAuthAction = async (actionType) => {
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
@@ -90,7 +79,6 @@
 
             try {
                 if (actionType === 'signup') {
-                    // Simplified: Just create user in Auth, no Firestore doc needed now
                     await createUserWithEmailAndPassword(window.auth, email, password);
                     alert(`✅ Signed Up and Logged In as ${email}. Full access enabled.`);
                 } else if (actionType === 'signin') {
@@ -103,7 +91,7 @@
             } catch (error) {
                 alert(`❌ Auth Failed: ${error.message}`);
             }
-        };
+        }
 
         window.updateAuthUI = async (user) => {
             const loggedOutUI = document.getElementById('loggedOutUI');
@@ -114,18 +102,12 @@
             if (user) {
                 loggedOutUI.style.display = 'none';
                 loggedInUI.style.display = 'flex';
-                
-                // 🛑 RBAC REMOVED: Set role to 'admin' (full access) if logged in
                 currentUserRole = 'admin'; 
                 userEmailDisplay.textContent = `User: ${user.email} | Role: FULL ACCESS`;
-                
                 authStatus.textContent = `Status: Logged In (Cloud Active)`;
                 authStatus.style.color = '#059669';
-                
                 showView('home');
-                
             } else {
-                // Logged Out State
                 loggedOutUI.style.display = 'flex';
                 loggedInUI.style.display = 'none';
                 authStatus.textContent = "Status: Logged Out (Cloud Disabled)";
@@ -133,7 +115,6 @@
                 currentUserRole = 'logged_out';
             }
             
-            // Check if active report ID is set, if not pass null
             const activeData = currentActiveReportId ? getFormData() : null;
             window.updateActionButtons(activeData);
         };
@@ -146,7 +127,7 @@
             if (!window.auth.currentUser) throw new Error("User not logged in.");
             const record = {
                 ...data, 
-                timestamp: new Date().toISOString(),
+                timestamp: data.timestamp || new Date().toISOString(), 
                 savedBy: window.auth.currentUser.email,
                 updatedAt: new Date().toISOString(), 
                 status: data.status || 'Running' 
@@ -173,17 +154,14 @@
                 }
             });
 
-            // reports को updatedAt के आधार पर छाँटें (नवीनतम पहले)
             return reports.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         };
 
         window.cloudDeleteReport = async (docId) => {
             if (!window.auth.currentUser) throw new Error("User not logged in.");
-            // 🛑 RBAC REMOVED: Any logged-in user can delete
             await deleteDoc(doc(window.db, 'job_cards', docId));
         };
 
-        // --- NEW VIEW SWITCHING LOGIC (UNCHANGED) ---
         function showView(view) {
             const homePanel = document.getElementById('homePanel');
             const formPanel = document.querySelector('.form');
@@ -236,7 +214,7 @@
     } 
     h2 { text-align:center; margin:0 0 8px 0; font-size:18px; }
     label { display:block; font-size:13px; margin-top:8px; }
-    input[type="text"], input[type="date"], input[type="email"], select { width:100%; padding:6px 8px; margin-top:4px; box-sizing:border-box; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"], input[type="date"], input[type="email"], input[type="time"], select { width:100%; padding:6px 8px; margin-top:4px; box-sizing:border-box; border: 1px solid #ccc; border-radius: 4px; }
     .top-grid { display:flex; gap:8px; }
     .top-grid > div { flex:1; }
     .actions { display:flex; gap:8px; margin-top:8px; }
@@ -261,7 +239,6 @@
         line-height: 1.4; 
     } 
     
-    /* Column 4 (Observation) should be smaller now */
     #pvTable td:nth-child(5) { 
         font-size: 9px; 
         line-height: 1.2;
@@ -288,104 +265,7 @@
     } 
     .report-search-section { border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; }
     .search-area { display: flex; gap: 8px; margin-bottom: 8px; }
-    .report-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; }
-    
-    /* --- New Styles for Customer/Month Grouping in Home View --- */
-    .customer-group, .month-group {
-        border: 1px solid #e5e7eb; /* light gray border */
-        margin-bottom: 10px;
-        border-radius: 6px;
-        overflow: hidden;
-    }
-    .customer-header, .month-header {
-        background: #f3f4f6; /* very light gray background */
-        padding: 8px 10px;
-        font-weight: bold;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: background-color 0.2s;
-        font-size: 14px;
-        color: #1f2937;
-        user-select: none; /* Prevent text selection on click */
-    }
-    .month-header {
-        background: #f9fafb; /* slightly lighter for month */
-        padding-left: 20px;
-        font-size: 13px;
-    }
-    .customer-header:hover, .month-header:hover {
-        background: #e5e7eb;
-    }
-    .report-list-item {
-        padding: 6px 15px 6px 30px; /* Indentation for item */
-        border-bottom: 1px dashed #eee;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: background-color 0.2s;
-        font-size: 13px;
-        background: white;
-    }
-    .report-list-item:hover {
-        background: #f7f7f7;
-    }
-    .report-list-item.selected { 
-        background: #dbeafe; 
-        font-weight: bold; 
-        border-left: 3px solid #2563eb; 
-        padding-left: 27px;
-    }
-    .folder-content {
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease-out;
-    }
-    .folder-content.expanded {
-        max-height: 2000px; /* Enough height for expansion */
-        transition: max-height 0.5s ease-in;
-    }
-    /* Arrow rotation for folder icon */
-    .toggle-icon {
-        transition: transform 0.3s;
-    }
-    .toggle-icon.expanded {
-        transform: rotate(90deg);
-    }
-    /* Hide the original list item styles (in case of conflict) */
-    .report-item {
-        display: none !important;
-    }
-    
-    /* End of New Styles for Customer/Month Grouping */
-
-
-    .full-width-grid { grid-template-columns: 1fr; } 
-    .operator-supervisor-grid { 
-        display: grid; 
-        grid-template-columns: 1fr; 
-        gap: 6px; 
-        border-top: 1px dashed #ddd; 
-        padding-top: 8px; 
-        margin-top: 8px; 
-    }
-    .auth-bar {
-        background-color: #f0f8ff;
-        padding: 8px 12px;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .auth-bar input { padding: 4px 6px; border: 1px solid #999; border-radius: 3px; margin-right: 5px; width: 140px; }
-    .auth-bar button { padding: 4px 8px; margin-left: 5px; cursor: pointer; border: none; border-radius: 3px; font-weight: bold; font-size: 13px; }
-    .auth-status-text { font-weight: bold; margin-right: 10px; font-size: 14px; }
-    .auth-controls { display: flex; align-items: center; flex-wrap: wrap; }
+    .report-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4ims: center; flex-wrap: wrap; }
     
     .inspection-codes-grid {
         display: grid;
@@ -405,6 +285,23 @@
     
     .hide-inspection { display: none; } 
     
+    /* --- NEW CSS for Collapsible Folders --- */
+    .customer-group { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+    .customer-header { background: #f0f0f0; padding: 8px 10px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .month-header { background: #fafafa; padding: 6px 15px; cursor: pointer; font-weight: 500; font-size: 13px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; }
+    .folder-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .folder-content.expanded { max-height: 1000px; /* Large value to allow expansion */ transition: max-height 0.5s ease-in; }
+    .toggle-icon { transition: transform 0.3s; margin-left: 5px; }
+    .toggle-icon.expanded { transform: rotate(90deg); }
+
+    .report-list-item { padding: 8px 20px; cursor: pointer; border-bottom: 1px dotted #eee; display: flex; justify-content: space-between; align-items: center; }
+    .report-list-item:hover { background: #f5f5f5; }
+    .report-list-item.selected { background: #e0f2f1; font-weight: bold; border-left: 4px solid #009688; }
+    
+    /* NEW: Qty input grid */
+    .qty-input-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+    .qty-input-grid > div { flex: 1; }
+    
     @media (max-width: 900px) {
         .container { flex-direction: column; }
         .form { width: 100%; max-width: none; height: auto; order: 1; }
@@ -417,6 +314,8 @@
         .auth-bar button { width: auto; margin: 5px; }
         
         #homePanel { height: auto !important; }
+        
+        .qty-input-grid { grid-template-columns: 1fr; }
     }
     @media print {
         body * { visibility: hidden; }
@@ -438,7 +337,6 @@
             padding: 4px 5px; 
             line-height: 1.4; 
         } 
-        /* Ensure Observation column has appropriate styles if needed */
         #pvTable td:nth-child(5) { font-size: 9px; } 
     }
   </style>
@@ -525,7 +423,15 @@
       </label>
       
       <div class="top-grid">
-        <div><label>Order/Challan Qty<input id="orderQty" type="text" placeholder="Qty" value="1000 Pcs" /></label></div>
+        <div class="qty-input-grid">
+          <div><label>Order/Challan Qty<input id="orderQty" type="text" placeholder="Qty" value="1000" /></label></div>
+          <div><label>Qty Unit
+            <select id="orderQtyUnit">
+                <option value="Nos" selected>Nos</option>
+                <option value="Kg">Kg</option>
+            </select>
+          </label></div>
+        </div>
         <div><label>Challan No/Date<input id="challan" type="text" placeholder="No / Date" value="CH/2508/01 | 01.09.2025" /></label></div>
       </div>
       <label>Part Desc / No<input id="partDesc" type="text" placeholder="Part description or no" value="LAC09170" /></label>
@@ -554,12 +460,34 @@
           <div><label>Top Coat Batch No.</label><input id="topBatch" type="text" placeholder="Top Coat Batch No" value="TCB202" /></div>
       </div>
       
+      <div class="top-grid" style="display:none; margin-top: -5px;">
+        <div><label>Pre-Heating Temp (Coating)</label><select id="preHeatingTemp"></select></div>
+        <div><label>Main Heating/Baking Temp (Coating)</label><select id="mainHeatingTemp"></select></div>
+      </div>
+      
       <h2 style="margin-top:20px;">Operation Details (Input Fields)</h2>
       <div class="rows-input"><div id="rowsInput"></div></div>
       <div class="note">हर ऑपरेशन के नीचे **Observation** फील्ड्स में अलग-अलग वैल्यू भरें।</div>
       <h2 style="margin-top:20px;">Signatures & Notes</h2>
-      <label>Verified By<input id="verifiedBy" type="text" placeholder="Verified by" value="SAKSHI CHAVHAN" /></label>
-      <label>Approved By<input id="approvedBy" type="text" placeholder="Approved by" value="ABHIJEET DHOKRAT" /></label>
+      
+      <label>Verified By
+        <select id="verifiedBy">
+            <option value="SAKSHI CHAVHAN">SAKSHI CHAVHAN</option>
+            <option value="KOMAL TAYADE">KOMAL TAYADE</option>
+            <option value="MANOJ SHAH">MANOJ SHAH</option>
+            <option value="N/A">N/A</option>
+        </select>
+      </label>
+      
+      <label>Approved By
+        <select id="approvedBy">
+            <option value="ABHIJEET DHOKRAT">ABHIJEET DHOKRAT</option>
+            <option value="MANOJ SHAH">MANOJ SHAH</option>
+            <option value="SURAJ KUMAR">SURAJ KUMAR</option>
+            <option value="N/A">N/A</option>
+        </select>
+      </label>
+      
       <label>Notes<input id="notes" type="text" placeholder="Notes / Remark" value="P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion." /></label>
       <div class="actions">
         <button id="applyBtn">Apply to Preview</button>
@@ -608,7 +536,7 @@
                 </tr>
             </tbody>
         </table>
-
+        
         <table id="pvTable">
           <thead>
             <tr>
@@ -643,10 +571,31 @@
 
   <script>
     let currentActiveReportId = null; 
-    // UPDATED: 'customerWhatsapp' removed from jobFields
-    const jobFields = ['customerName', 'orderQty','challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
     
-    // --- SPECIFICATIONS (UNCHANGED) ---
+    // UPDATED: Added orderQtyUnit to jobFields
+    const jobFields = ['customerName', 'orderQty', 'orderQtyUnit', 'challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
+    
+    const SUPERVISORS = [
+        "MANOJ SHAH", 
+        "SURAJ KUMAR", 
+        "MOHAMMAD ANSARI", 
+        "SAKSHI CHAVHAN", 
+        "KOMAL TAYADE",
+        "ABHIJEET DHOKRAT",
+        "N/A"
+    ];
+
+    // --- TEMPERATURE SPECIFICATIONS (Ranges for Select Options) ---
+    const TEMPERATURE_SPECS = {
+        Geopert: { pre: ["280°C"], main: ["360°C"] },
+        Aquazinc: { pre: ["N/A"], main: ["180°C", "200°C"] }, 
+        Zintek: { pre: ["220°C"], main: ["280°C"] },
+        // Techdip temp based on user's note
+        Techdip: { pre: ["220°C"], main: ["260°C"] }, 
+        Drying: { pre: ["100°C", "150°C", "220°C"], main: []}
+    };
+
+    // --- UPDATED: SPECIFICATIONS (Including new Viscosity values) ---
     const SPECIFICATIONS = {
         "Incoming Inspection": "Dent free, no heavy rust or oil, gauge fitment",
         "Alkaline Cleaning": "45-65 gms/litre",
@@ -656,46 +605,54 @@
         "Spare Operation": "N/A",
         "Final Inspection_Silver": "No uncover coating, no excess paint in thread & socket, Adhesion test should be clean. Silver Thickness range - 6 to 12 microns",
         "Final Inspection_Black": "No uncover coating, no excess paint in thread & socket, Adhesion test should be clean. Black Thickness range - 8 to 16 microns",
-        "Silver_Base Coat -1 & Curing": "Geopert: Viscosity - 90 to 120 sec, curing temp - 360°C, speed - 5 Hz.",
-        "Silver_Base Coat -2 & Curing": "Geopert: Viscosity - 90 to 120 sec, curing temp - 360°C, speed - 5 Hz.",
-        "Silver_Top Coat -1 & Curing": "Aquazinc: Viscosity - 28 to 38 sec, curing temp - 180°C, time - 30 mins.", 
-        "Silver_Top Coat -2 & Curing": "N/A", 
-        "Black_Base Coat -1 & Curing": "Zintek: Viscosity -42-53 sec, curing temp - 280°C, speed - 3.38 Hz.",
-        "Black_Base Coat -2 & Curing": "Zintek: Viscosity -42-53 sec, curing temp - 280°C, speed - 3.38 Hz.",
-        "Black_Top Coat -1 & Curing": "Techdip: Viscosity -42-50 sec, curing temp - 260°C, speed - 3.38 Hz.",
-        "Black_Top Coat -2 & Curing": "Techdip: Viscosity -42-50 sec, curing temp - 260°C, speed - 3.38 Hz.",
+        
+        // --- UPDATED VISCOSITY: Geopert 60-90 sec ---
+        "Silver_Base Coat -1 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (280°C), Main Heating Temp (360°C)",
+        "Silver_Base Coat -2 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (280°C), Main Heating Temp (360°C)",
+        "Silver_Top Coat -1 & Curing": "Aquazinc: Viscosity - 28-38 sec, time - 30 mins., Baking Temp (180°C/200°C)", 
+        
+        // --- UPDATED VISCOSITY: Zintek 33-38 sec ---
+        "Black_Base Coat -1 & Curing": "Zintek: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
+        "Black_Base Coat -2 & Curing": "Zintek: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
+        "Black_Top Coat -1 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
+        "Black_Top Coat -2 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
     };
     
-    // --- PARAMETERS (UNCHANGED) ---
+    // --- UPDATED: PARAMETERS (Incoming Inspection simplified; Packing & Dispatch keeps Qty Unit select) ---
     const PARAMETERS = {
         "Incoming Inspection": { labels: ["Observation"], units: [""] }, 
         "Alkaline Cleaning": { labels: ["Pointage"], units: ["gms/litre"] }, 
-        "Drying": { labels: ["Temp", "Time"], units: ["°C", "min"] }, 
+        "Drying": { labels: ["Temp (Select)", "Time"], units: ["°C", "min"], useTempSelect: true, tempType: 'Drying' }, 
         "Shot Blasting": { labels: ["Time"], units: ["min"] },
-        "Base Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing", "Speed"], units: ["sec", "°C", "", "Hz"], isCoating: true },
-        "Base Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing", "Speed"], units: ["sec", "°C", "", "Hz"], isCoating: true },
-        "Top Coat -1 & Curing": { labels: ["Viscosity", "Temp", "Curing", "Time/Speed"], units: ["sec", "°C", "", "min/Hz"], isCoating: true },
-        "Top Coat -2 & Curing": { labels: ["Viscosity", "Temp", "Curing", "Time/Speed"], units: ["sec", "°C", "", "min/Hz"], isCoating: true },
+        "Base Coat -1 & Curing": { labels: ["Viscosity", "Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
+        "Base Coat -2 & Curing": { labels: ["Viscosity", "Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
+        "Top Coat -1 & Curing": { labels: ["Viscosity", "Time/Speed", "Baking Temp (Select)"], units: ["sec", "min/Hz", "°C"], isCoating: true, tempType: 'Top' },
+        "Top Coat -2 & Curing": { labels: ["Viscosity", "Time/Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "min/Hz", "°C", "°C"], isCoating: true, tempType: 'Top' },
         "Final Inspection": { labels: ["Thickness", "Adhesion"], units: ["microns", ""] },
-        "Packing & Dispatch": { labels: ["Qty", "Match"], units: [""] },
+        "Packing & Dispatch": { labels: ["Dispatch Qty", "Qty Unit", "Match"], units: ["", "", ""], isQtySelect: true },
         "Spare Operation": { labels: ["N/A"], units: [""] },
     };
     
+    // --- BASE_OPERATIONS (Kept as structure, logic in getCurrentPredefinedOperations) ---
     const BASE_OPERATIONS = [
-      { op: "Incoming Inspection", color: 'N/A' },
-      { op: "Alkaline Cleaning", color: 'N/A' },
-      { op: "Drying", color: 'N/A' },
-      { op: "Shot Blasting", color: 'N/A' },
-      { op: "Final Inspection", color: 'N/A' },
-      { op: "Packing & Dispatch", color: 'N/A' },
-      { op: "Spare Operation", color: 'N/A' }, 
+      { op: "Incoming Inspection", color: 'N/A', order: 1 },
+      { op: "Alkaline Cleaning", color: 'N/A', order: 2 },
+      { op: "Drying", color: 'N/A', order: 3 },
+      { op: "Shot Blasting", color: 'N/A', order: 4 },
+      // Coating Steps are inserted here (order 5, 6, 7, 8)
+      { op: "Final Inspection", color: 'N/A', order: 9 },
+      { op: "Packing & Dispatch", color: 'N/A', order: 10 },
+      { op: "Spare Operation", color: 'N/A', order: 11 }, 
+      { op: "Spare Operation", color: 'N/A', order: 12 }, 
     ];
     
-    // --- Core Logic Functions - getCurrentPredefinedOperations (UNCHANGED) ---
+    // --- getCurrentPredefinedOperations (Removes Spare Operation for Silver) ---
     function getCurrentPredefinedOperations() {
         const paintSelect = document.getElementById('paint');
         const paintType = paintSelect.value;
-        const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS)); 
+        // Start with a copy of BASE_OPERATIONS
+        const ops = JSON.parse(JSON.stringify(BASE_OPERATIONS.slice(0, 4))); 
+        
         const coatingSteps = [];
 
         const silverDiv = document.getElementById('silverInspDiv');
@@ -704,58 +661,108 @@
         silverDiv.classList.add('hide-inspection');
         blackDiv.classList.add('hide-inspection');
         
-        let requiredLength = 10; 
-        
         if (paintType === 'Black') {
             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
             blackDiv.classList.remove('hide-inspection');
             coatingSteps.push(
-                { op: "Base Coat -1 & Curing", color: 'Black' },
-                { op: "Base Coat -2 & Curing", color: 'Black' },
-                { op: "Top Coat -1 & Curing", color: 'Black' },
-                { op: "Top Coat -2 & Curing", color: 'Black' }
+                { op: "Base Coat -1 & Curing", color: 'Black', paintName: 'Zintek' },
+                { op: "Base Coat -2 & Curing", color: 'Black', paintName: 'Zintek' },
+                { op: "Top Coat -1 & Curing", color: 'Black', paintName: 'Techdip' }, 
+                { op: "Top Coat -2 & Curing", color: 'Black', paintName: 'Techdip' } 
             );
-             requiredLength = 10; 
-        } else if (paintType === 'Silver') {
+             // 4 pre-steps + 4 coating = 8
+        } else { // Silver (Default)
              document.getElementById('coatingSpec').value = "2 Base | 1 Top";
              silverDiv.classList.remove('hide-inspection');
              coatingSteps.push(
-                { op: "Base Coat -1 & Curing", color: 'Silver' },
-                { op: "Base Coat -2 & Curing", color: 'Silver' },
-                { op: "Top Coat -1 & Curing", color: 'Silver' }
+                { op: "Base Coat -1 & Curing", color: 'Silver', paintName: 'Geopert' },
+                { op: "Base Coat -2 & Curing", color: 'Silver', paintName: 'Geopert' },
+                { op: "Top Coat -1 & Curing", color: 'Silver', paintName: 'Aquazinc' }
             );
-            requiredLength = 9; 
-        } else {
-             document.getElementById('coatingSpec').value = "2 Base | 2 Top";
-             blackDiv.classList.remove('hide-inspection');
-             coatingSteps.push(
-                { op: "Base Coat -1 & Curing", color: 'Black' },
-                { op: "Base Coat -2 & Curing", color: 'Black' },
-                { op: "Top Coat -1 & Curing", color: 'Black' },
-                { op: "Top Coat -2 & Curing", color: 'Black' }
-            );
-            requiredLength = 10;
+            // 4 pre-steps + 3 coating = 7
         }
 
-        const finalInspectionIndex = ops.findIndex(op => op.op === 'Final Inspection');
-        ops.splice(finalInspectionIndex, 0, ...coatingSteps);
-        
-        while (ops.length > requiredLength) {
-             ops.pop();
-        }
-        
-        while (ops.length < requiredLength) { 
-            ops.push({ op: "Spare Operation", color: 'N/A' }); 
-        }
+        // Insert coating steps
+        ops.push(...coatingSteps);
 
+        // Add Final Inspection and Packing/Dispatch
+        ops.push(
+            { op: "Final Inspection", color: 'N/A', order: ops.length + 1 },
+            { op: "Packing & Dispatch", color: 'N/A', order: ops.length + 2 }
+        );
+
+        // --- NEW LOGIC: Prevent adding spare rows for Silver to stop at Dispatch (Row 9) ---
+        let totalRows = ops.length; // Silver: 9, Black: 10
+        const targetRows = 10; 
+
+        if (paintType === 'Silver') {
+            // No spare operations for Silver (Total 9 Ops)
+        } else if (paintType === 'Black') {
+            // Allow one spare operation to fill up to 11 rows if needed, or simply leave at 10. 
+            // Stick to 10 for consistency of black ops.
+        }
+        
+        // This ensures Silver has 9, Black has 10, and no extra 'Spare Operations' are added below 
+        // Packing & Dispatch unless specifically requested to hit a minimum table height.
+        // We will fill the preview table with blank rows instead of adding them to the input data structure.
+        
         return ops; 
     }
 
-    // --- updateRowInputs (UPDATED: QTY field removed) ---
+    /**
+     * Helper to get Temperature options for a specific step.
+     * @param {string} opName - The name of the operation.
+     * @param {string} paintType - 'Silver' or 'Black'.
+     * @returns {object} {pre: [], main: []}
+     */
+    function getTemperatureOptions(opName, paintType) {
+        let preTemps = [];
+        let mainTemps = [];
+        
+        if (opName === "Drying") {
+            preTemps = TEMPERATURE_SPECS.Drying.pre;
+            mainTemps = [];
+            return { pre: preTemps, main: mainTemps };
+        }
+        
+        const operations = getCurrentPredefinedOperations();
+        const opConfig = operations.find(op => op.op === opName);
+        const paintKey = opConfig ? opConfig.paintName : null;
+        
+        if (paintKey && TEMPERATURE_SPECS[paintKey]) {
+            const spec = TEMPERATURE_SPECS[paintKey];
+            
+            if (opName.includes('Top Coat')) { 
+                if (paintType === 'Silver') { // Aquazinc
+                    if (opName === 'Top Coat -1 & Curing') { 
+                        mainTemps = spec.main; // Only Baking Temp
+                    }
+                } else if (paintType === 'Black') { // Techdip
+                     preTemps = spec.pre;
+                     mainTemps = spec.main;
+                }
+            } else if (opName.includes('Base Coat')) { 
+                preTemps = spec.pre;
+                mainTemps = spec.main;
+            }
+            
+            // Aquazinc (Silver Top Coat) has N/A for pre-heating
+            if (paintKey === 'Aquazinc' && opName.includes('Top Coat')) {
+                 preTemps = []; // Ensure no pre-heating field for Aquazinc
+            }
+        }
+        
+        return { pre: preTemps, main: mainTemps };
+    }
+
+
+    // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, and TIME) ---
     function updateRowInputs(savedRows = []) {
+        
         const predefinedOperations = getCurrentPredefinedOperations();
         const rowsInputContainer = document.getElementById('rowsInput');
         rowsInputContainer.innerHTML = ''; 
+        const paintType = document.getElementById('paint').value;
         
         const mapSavedData = (rows) => {
             const dataMap = {};
@@ -764,10 +771,32 @@
                 const values = (r.observation || '').split(';').map(v => v.trim()); 
                 const obsValues = {};
                 
-                opParams.labels.forEach((label, j) => {
-                    const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
-                    obsValues[inputName] = values[j] || '';
+                // --- Logic to correctly map saved values to data-param keys ---
+                let valueIndex = 0;
+                opParams.labels.forEach((label) => {
+                    let paramKey = '';
+                    if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
+                    else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
+                    else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
+                    else if (label.includes('Temp')) paramKey = 'Temp';
+                    else if (label.includes('Viscosity')) paramKey = 'Viscosity';
+                    else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
+                    else if (label.includes('Speed')) paramKey = 'Speed';
+                    else if (label.includes('Pointage')) paramKey = 'Pointage';
+                    else if (label.includes('Thickness')) paramKey = 'Thickness';
+                    else if (label.includes('Adhesion')) paramKey = 'Adhesion';
+                    else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
+                    else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
+                    else if (label.includes('Match')) paramKey = 'Match';
+                    else if (label.includes('Observation')) paramKey = 'Observation';
+
+                    if (paramKey && values[valueIndex] !== undefined) {
+                        obsValues[paramKey] = values[valueIndex] || '';
+                        valueIndex++;
+                    }
                 });
+                // --- End Logic ---
+                
                 dataMap[r.operation] = { 
                     ...r, 
                     obsValues, 
@@ -795,26 +824,98 @@
             
             let obsFieldsHTML = '';
             
-            const paintType = document.getElementById('paint').value;
             const specKey = opName.includes('Coat') ? `${paintType}_${opName}` : (opName === 'Final Inspection' ? `${opName}_${paintType}` : opName);
             const specification = SPECIFICATIONS[specKey] || opName;
 
-
-            opParams.labels.forEach((label, j) => {
+            opParams.labels.forEach((label) => {
                 if (label !== "N/A" && label.trim().length > 0) {
-                    const unit = opParams.units[j];
-                    const inputName = label.replace(/[^a-zA-Z0-9]/g, ''); 
-                    const placeholder = `${label} ${unit ? '(' + unit + ')' : ''}`;
-                    const savedValue = savedData.obsValues[inputName] || '';
+                    const unit = ''; 
+                    // Determine the unique parameter key
+                    let paramKey = '';
+                    const isSelectField = label.includes('(Select)');
+                    const isQtyUnit = label.includes('Qty Unit');
                     
-                    obsFieldsHTML += `
-                        <div>
-                            <label>${placeholder}</label>
-                            <input data-field="obsParam" data-param="${inputName}" type="text" placeholder="${placeholder}" value="${savedValue}" />
-                        </div>
-                    `;
+                    if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
+                    else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
+                    else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
+                    else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
+                    else if (label.includes('Viscosity')) paramKey = 'Viscosity';
+                    else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
+                    else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                    else if (label.includes('Pointage')) paramKey = 'Pointage';
+                    else if (label.includes('Thickness')) paramKey = 'Thickness';
+                    else if (label.includes('Adhesion')) paramKey = 'Adhesion';
+                    else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
+                    else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
+                    else if (label.includes('Match')) paramKey = 'Match';
+                    else if (label.includes('Observation') && !label.includes('Qty')) paramKey = 'Observation';
+
+                    if (!paramKey) return; // Skip if no key is defined
+                    
+                    const placeholder = `${label.replace('(Select)', '').trim()}`;
+                    const savedValue = savedData.obsValues[paramKey] || '';
+                    
+                    if (isSelectField) {
+                        const tempOptions = getTemperatureOptions(opName, paintType);
+                        
+                        let options = [];
+                        if (paramKey === 'PreHeatingTemp' || paramKey === 'Temp') {
+                            options = tempOptions.pre;
+                        } else if (paramKey === 'MainHeatingTemp' || paramKey === 'BakingTemp') {
+                            options = tempOptions.main;
+                        }
+                        
+                        // If no options are available (e.g., Aquazinc pre-heating), skip this select field
+                        if (options.length === 0 && (paramKey === 'PreHeatingTemp')) {
+                            return; 
+                        }
+                        
+                        let selectOptionsHTML = `<option value="">-- Select ${label.replace('(Select)', '').trim()} --</option>`;
+                        options.forEach(temp => {
+                            const selected = (savedValue === temp) ? 'selected' : '';
+                            selectOptionsHTML += `<option value="${temp}" ${selected}>${temp}</option>`;
+                        });
+
+                        obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder}</label>
+                                <select data-field="obsParam" data-param="${paramKey}">
+                                    ${selectOptionsHTML}
+                                </select>
+                            </div>
+                        `;
+                    } else if (isQtyUnit) {
+                        const units = ["Nos", "Kg"];
+                         let selectOptionsHTML = `<option value="">-- Select Unit --</option>`;
+                        units.forEach(u => {
+                            const selected = (savedValue === u) ? 'selected' : '';
+                            selectOptionsHTML += `<option value="${u}" ${selected}>${u}</option>`;
+                        });
+                        
+                        obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder}</label>
+                                <select data-field="obsParam" data-param="${paramKey}">
+                                    ${selectOptionsHTML}
+                                </select>
+                            </div>
+                        `;
+                        
+                    } else {
+                         obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder}</label>
+                                <input data-field="obsParam" data-param="${paramKey}" type="text" placeholder="${placeholder}" value="${savedValue}" />
+                            </div>
+                        `;
+                    }
                 }
             });
+            
+            // Adjust grid layout if only one field (Observation) remains
+            const obsFieldsContainerClass = opName === 'Incoming Inspection' ? 'observation-fields' : 'observation-fields';
+            const obsFieldsStyle = opName === 'Incoming Inspection' ? 'style="grid-template-columns: 1fr;"' : '';
+            
             
             obsFieldsHTML += `
                 <div>
@@ -827,6 +928,11 @@
                 </div>
             `;
             
+            let supervisorOptionsHTML = SUPERVISORS.map(name => 
+                `<option value="${name}" ${savedData.supervisorSign === name ? 'selected' : ''}>${name}</option>`
+            ).join('');
+
+            
             div.innerHTML = `
                 <div class="row-header">
                     <span>${srCount}. ${opName}</span>
@@ -834,24 +940,34 @@
                 </div>
                 <div class="row-detail-grid">
                     <div>
-                        <label>Date/Shift</label>
-                        <input data-field="dateShift" type="text" placeholder="Date/Shift" value="${savedData.dateShift || ''}" />
+                        <label>Date (Calendar)</label>
+                        <input data-field="dateShift" type="date" value="${savedData.dateShift || ''}" />
                     </div>
-                    <div>&nbsp;</div>
+                    <div>
+                        <label>Shift</label>
+                        <select data-field="shiftTime">
+                            <option value="">-- Select Shift --</option>
+                            <option value="1st" ${savedData.shiftTime === '1st' ? 'selected' : ''}>1st</option>
+                            <option value="2nd" ${savedData.shiftTime === '2nd' ? 'selected' : ''}>2nd</option>
+                            <option value="3rd" ${savedData.shiftTime === '3rd' ? 'selected' : ''}>3rd</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="row-detail-grid">
-                    <div><label>From Time</label><input data-field="fromTime" type="text" placeholder="From T." value="${savedData.fromTime || ''}" /></div>
-                    <div><label>To Time</label><input data-field="toTime" type="text" placeholder="To T." value="${savedData.toTime || ''}" /></div>
+                    <div><label>From Time</label><input data-field="fromTime" type="time" value="${savedData.fromTime || ''}" /></div>
+                    <div><label>To Time</label><input data-field="toTime" type="time" value="${savedData.toTime || ''}" /></div>
                 </div>
 
-                <div class="observation-fields">
+                <div class="${obsFieldsContainerClass}" ${obsFieldsStyle}>
                     ${obsFieldsHTML}
                 </div>
                 
                 <div class="operator-supervisor-grid">
                     <div>
                         <label>Signature Input (Operator/Supervisor/QA)</label>
-                        <input data-field="supervisorSign" type="text" placeholder="Operator Name / QA Name / Sign" value="${savedData.supervisorSign || ''}" />
+                        <select data-field="supervisorSign">
+                            ${supervisorOptionsHTML}
+                        </select>
                     </div>
                 </div>
             `;
@@ -867,10 +983,11 @@
         applyPreview(); 
     }
 
-    // --- getFormData (UPDATED: 'customerWhatsapp' removed and QTY saving logic removed) ---
+    // --- getFormData (REVISED: Added shiftTime field to data collection) ---
     function getFormData() {
       const data = {};
-      jobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
+      const relevantJobFields = ['customerName', 'orderQty', 'orderQtyUnit','challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
+      relevantJobFields.forEach(f=> data[f] = document.getElementById(f).value.trim());
       
       data.status = document.getElementById('statusField')?.value || 'Running'; 
       
@@ -878,11 +995,16 @@
       const cleanPart = data.partDesc.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       const cleanChallan = data.challan.replace(/[^a-zA-Z0-9]/g, '_').replace(/_{2,}/g, '_').trim();
       
-      data.uniqueId = `${cleanCustomer.substring(0, 3)}_${cleanPart}_${cleanChallan}`;
-      if(data.uniqueId.length < 5 || data.uniqueId.length > 50) {
-           data.uniqueId = `NEW_${Date.now()}`;
+      data.uniqueId = currentActiveReportId; 
+      
+      if (!data.uniqueId || data.uniqueId.startsWith('NEW_')) {
+          data.uniqueId = `${cleanCustomer.substring(0, 3)}_${cleanPart}_${cleanChallan}`;
+          if(data.uniqueId.length < 5 || data.uniqueId.length > 50 || data.uniqueId.endsWith('__')) {
+               data.uniqueId = `NEW_${Date.now()}`;
+          }
+          data.uniqueId = data.uniqueId.toUpperCase();
       }
-      data.uniqueId = data.uniqueId.toUpperCase();
+      
       
       const rows = [];
       document.getElementById('rowsInput').querySelectorAll('.row-group').forEach((group, index)=>{
@@ -891,29 +1013,61 @@
         
         let observationValues = [];
         
-        opParams.labels.forEach((label) => {
-            if (label !== "N/A" && label.trim().length > 0) {
-                const inputName = label.replace(/[^a-zA-Z0-9]/g, '');
-                const inputElement = group.querySelector(`input[data-field="obsParam"][data-param="${inputName}"]`);
-                observationValues.push(inputElement?.value.trim() || '');
-            }
-        });
+        if(opParams && opParams.labels) {
+            opParams.labels.forEach((label) => {
+                if (label !== "N/A" && label.trim().length > 0) {
+                    let paramKey = '';
+                    
+                    if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
+                    else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
+                    else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
+                    else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
+                    else if (label.includes('Viscosity')) paramKey = 'Viscosity';
+                    else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
+                    else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                    else if (label.includes('Pointage')) paramKey = 'Pointage';
+                    else if (label.includes('Thickness')) paramKey = 'Thickness';
+                    else if (label.includes('Adhesion')) paramKey = 'Adhesion';
+                    else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
+                    else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
+                    else if (label.includes('Match')) paramKey = 'Match';
+                    else if (label.includes('Observation') && !label.includes('Qty')) paramKey = 'Observation';
+
+                    if (!paramKey) return; 
+
+                    const element = group.querySelector(`[data-field="obsParam"][data-param="${paramKey}"]`);
+                    // Skip if PreHeatingTemp field doesn't exist (e.g. Aquazinc)
+                    if (paramKey === 'PreHeatingTemp' && !element) return; 
+                    
+                    observationValues.push(element?.value.trim() || '');
+                }
+            });
+        }
         
         const observation = observationValues.join('; ').trim(); 
 
         const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
-        if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '') return;
+        // Use select for shiftTime
+        const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
+        
+        // Use type="time" for time fields
+        const fromTimeValue = group.querySelector('input[data-field="fromTime"]').value;
+        const toTimeValue = group.querySelector('input[data-field="toTime"]').value;
+        
+        // Skip spare if empty
+        if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '' && shiftTimeValue === '') return;
         
         rows.push({
           sr: index + 1,
-          dateShift: group.querySelector('input[data-field="dateShift"]').value.trim(),
+          dateShift: dateShiftValue,
+          shiftTime: shiftTimeValue, // Now uses select value
           observation: observation, 
-          fromTime: group.querySelector('input[data-field="fromTime"]').value.trim(),
-          toTime: group.querySelector('input[data-field="toTime"]').value.trim(),
-          qty: '', // Qty field removed, saving as empty string to maintain schema if needed
+          fromTime: fromTimeValue,
+          toTime: toTimeValue,
+          qty: '', 
           inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
           operatorChecked: '', 
-          supervisorSign: group.querySelector('input[data-field="supervisorSign"]').value.trim(), 
+          supervisorSign: group.querySelector('select[data-field="supervisorSign"]').value, 
           operation: operation, 
         });
       });
@@ -922,7 +1076,7 @@
       return data;
     }
 
-    // --- Utility Functions (UPDATED: 'customerWhatsapp' removed from clearForm) ---
+    // --- Utility Functions (setFormData and clearForm REVISIONS) ---
 
     function setFormData(data) {
         jobFields.forEach(f => {
@@ -939,41 +1093,40 @@
             document.getElementById('completeReportBtn').textContent = (currentStatus === 'Completed') ? '✅ Job is Completed' : '✅ Mark as Completed';
         }
 
-
-        currentActiveReportId = data.uniqueId || null;
-        document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
-        
-        document.getElementById('saveReport').textContent = currentActiveReportId && currentActiveReportId.startsWith('NEW') ? '💾 Save New Report' : '💾 Update Report';
+        currentActiveReportId = data.uniqueId || null; 
+        document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId && !currentActiveReportId.startsWith('NEW') ? currentActiveReportId : '-- New --'}`;
         
         updateRowInputs(data.rows || []); 
-        window.updateActionButtons(data); // Using global function
+        window.updateActionButtons(data); 
     }
 
     function clearForm() {
         jobFields.forEach(f => {
             const el = document.getElementById(f);
-            if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.type === 'email')) {
+            if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.type === 'email' || el.type === 'date' || el.type === 'time')) {
                  el.value = ''; 
             } else if (el && el.tagName === 'SELECT') {
-                 el.value = el.options[0].value;
+                 el.value = el.options[0]?.value; 
             }
         });
         
-        // Resetting default values
+        // Resetting specific default values
         document.getElementById('customerName').value = "Star Engineering";
-        // REMOVED: document.getElementById('customerWhatsapp').value = "+919999999999";
-        document.getElementById('orderQty').value = "1000 Pcs";
+        document.getElementById('orderQty').value = "1000";
+        document.getElementById('orderQtyUnit').value = "Nos";
         document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
         document.getElementById('batchNo').value = "250819"; 
+        
         document.getElementById('verifiedBy').value = "SAKSHI CHAVHAN";
         document.getElementById('approvedBy').value = "ABHIJEET DHOKRAT";
+        
         document.getElementById('notes').value = "P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion.";
         document.getElementById('paint').value = 'Black'; 
         document.getElementById('silverInsp').value = 'Silver Paint';
         document.getElementById('blackInsp').value = 'Black Paint';
         document.getElementById('baseBatch').value = 'BCB101';
         document.getElementById('topBatch').value = 'TCB202';
-        
+
         const statusEl = document.getElementById('statusField');
         if (statusEl) statusEl.value = 'Running';
         document.getElementById('completeReportBtn').textContent = '✅ Mark as Completed';
@@ -983,11 +1136,10 @@
         document.getElementById('currentReportId').textContent = `Active ID: -- New --`;
         document.getElementById('saveReport').textContent = '💾 Save New Report';
         document.getElementById('deleteReport').disabled = true;
-        // document.getElementById('sendReportBtn').disabled = true; // REMOVED
 
         updateRowInputs(); 
         applyPreview();
-        window.updateActionButtons(null); // Using global function
+        window.updateActionButtons(null); 
     }
     
     // --- CLOUD LOGIC FUNCTIONS (UNCHANGED) ---
@@ -1007,16 +1159,17 @@
 
         try {
             await window.cloudSaveReport(data, data.uniqueId);
+            
             currentActiveReportId = data.uniqueId;
             document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
-            document.getElementById('saveReport').textContent = '💾 Update Report';
+            
+            setFormData(data); 
+            
             alert(`✅ रिपोर्ट सफलतापूर्वक क्लाउड पर सेव/अपडेट हो गई है। ID: ${currentActiveReportId}`);
             
-            // Reload lists to show updated data and grouping
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             
-            window.updateActionButtons(data); // Using global function
         } catch (e) {
             console.error(e);
             alert(`❌ रिपोर्ट सेव करने में त्रुटि: ${e.message}`);
@@ -1029,7 +1182,6 @@
             return;
         }
         
-        // 🛑 RBAC REMOVED: No more Admin check here, only check for logged in is in cloudDeleteReport
         if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं?`)) {
             return;
         }
@@ -1046,7 +1198,7 @@
         }
     }
     
-    // --- UPDATED: loadReportsList (UNCHANGED) ---
+    // --- loadReportsList (Initial state is collapsed) ---
     window.loadReportsList = async (query = '', statusFilter = 'Running') => {
         try {
             const reports = await window.cloudLoadReports(query, statusFilter);
@@ -1061,18 +1213,12 @@
                  return;
             }
             
-            // --- 1. Grouping Logic: Customer-wise and then Month-wise ---
-            const groupedReports = {}; // { customerName: { monthYear: [reports] } }
+            const groupedReports = {}; 
             const monthNames = ["जनवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितम्बर", "अक्टूबर", "नवम्बर", "दिसम्बर"];
             
             reports.forEach(report => {
-                // Determine the correct date for sorting/grouping (updatedAt is preferred)
                 const date = new Date(report.updatedAt || report.timestamp);
-                
-                // Construct MonthYear Key (e.g., "जनवरी 2025")
                 const monthYearKey = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
-                
-                // Construct Customer Key
                 const customerKey = report.customerName.trim() || 'No Customer Name';
                 
                 if (!groupedReports[customerKey]) {
@@ -1084,7 +1230,6 @@
                 groupedReports[customerKey][monthYearKey].push(report);
             });
             
-            // --- 2. Rendering the Grouped Structure ---
             for (const customerName in groupedReports) {
                 const customerGroupDiv = document.createElement('div');
                 customerGroupDiv.className = 'customer-group';
@@ -1092,7 +1237,6 @@
                 const customerHeader = document.createElement('div');
                 customerHeader.className = 'customer-header';
                 
-                // Calculate total jobs for this customer
                 let totalJobs = 0;
                 for(const month in groupedReports[customerName]) {
                     totalJobs += groupedReports[customerName][month].length;
@@ -1105,18 +1249,15 @@
                 customerContent.className = 'folder-content'; 
                 customerGroupDiv.appendChild(customerContent);
                 
-                // Toggle logic for Customer Folder
                 customerHeader.addEventListener('click', () => {
                     customerContent.classList.toggle('expanded');
                     customerHeader.querySelector('.toggle-icon').classList.toggle('expanded');
                 });
                 
-                // Sort months from newest to oldest
                 const sortedMonths = Object.keys(groupedReports[customerName]).sort((a, b) => {
-                     // Convert month/year string back to a comparable date object
                      const dateA = new Date(a.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
                      const dateB = new Date(b.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
-                     return dateB - dateA; // Newest first
+                     return dateB - dateA; 
                 });
 
 
@@ -1133,14 +1274,12 @@
                     monthContent.className = 'folder-content'; 
                     customerContent.appendChild(monthContent);
                     
-                    // Toggle logic for Month Folder
                     monthHeader.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Prevent the parent Customer folder from closing
+                        e.stopPropagation(); 
                         monthContent.classList.toggle('expanded');
                         monthHeader.querySelector('.toggle-icon').classList.toggle('expanded');
                     });
                     
-                    // Render individual reports (sorted newest first by cloudLoadReports)
                     groupedReports[customerName][monthYearKey].forEach(report => {
                         const item = document.createElement('div');
                         item.className = 'report-list-item';
@@ -1160,12 +1299,6 @@
                     });
                 }
                 container.appendChild(customerGroupDiv);
-                
-                // Optionally expand the first customer/month group by default
-                // if (container.children.length === 1) {
-                //     customerContent.classList.add('expanded');
-                //     customerHeader.querySelector('.toggle-icon').classList.add('expanded');
-                // }
             }
         } catch (e) {
             console.error(`Error loading ${statusFilter} reports:`, e);
@@ -1179,15 +1312,13 @@
     function handleLoadReport(reportData) {
         setFormData(reportData);
         
-        // Remove 'selected' class from all report items
         document.querySelectorAll('.report-list-item').forEach(item => item.classList.remove('selected'));
         
-        // Add 'selected' class to the newly loaded report item
         const selectedItem = document.querySelector(`.report-list-item[data-id="${reportData.uniqueId}"]`);
         if (selectedItem) {
             selectedItem.classList.add('selected');
             
-            // Ensure the parent folders are expanded when the item is loaded
+            // Logic to expand all parent folders on selection
             let currentParent = selectedItem.closest('.folder-content');
             while(currentParent) {
                 currentParent.classList.add('expanded');
@@ -1202,7 +1333,6 @@
         }
     }
     
-    // --- Mark Job as Completed (UNCHANGED) ---
     async function handleCompleteReport() {
         if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
             alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप Completed मार्क करना चाहते हैं।");
@@ -1214,15 +1344,17 @@
             return;
         }
         
-        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को 'Completed' मार्क करना चाहते हैं? (यह 'Completed Jobs' फोल्डर में चली जाएगी)`)) {
-            return;
-        }
-        
         try {
-            const data = getFormData();
-            data.status = 'Completed'; 
+            const dataToComplete = getFormData();
+            await window.cloudSaveReport(dataToComplete, dataToComplete.uniqueId);
             
-            await window.cloudSaveReport(data, data.uniqueId);
+            if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को 'Completed' मार्क करना चाहते हैं? (यह 'Completed Jobs' फोल्डर में चली जाएगी)`)) {
+                return;
+            }
+            
+            dataToComplete.status = 'Completed'; 
+            
+            await window.cloudSaveReport(dataToComplete, dataToComplete.uniqueId);
             
             document.getElementById('statusField').value = 'Completed';
             document.getElementById('completeReportBtn').textContent = '✅ Job is Completed';
@@ -1231,45 +1363,17 @@
             
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
-            window.updateActionButtons(data); // Using global function
+            window.updateActionButtons(dataToComplete); 
+            
         } catch (e) {
             console.error(e);
-            alert(`❌ रिपोर्ट को 'Completed' मार्क करने में त्रुटि: ${e.message}`);
+            alert(`❌ रिपोर्ट को 'Completed' मार्क करने या सेव करने में त्रुटि: ${e.message}`);
         }
     }
-
-    // --- REMOVED: Dummy Function for Send Report ---
-    /*
-    function handleSendReport() {
-        if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
-            alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप भेजना चाहते हैं।");
-            return;
-        }
-
-        const data = getFormData();
-        const whatsapp = data.customerWhatsapp;
-        
-        let message = `✅ Report ID ${currentActiveReportId} (Customer: ${data.customerName}) को भेजने की प्रक्रिया शुरू हो गई है।\n`;
-        
-        // Email logic removed
-        message += `\n❌ ईमेल पता हटा दिया गया है, ईमेल नहीं भेजा जाएगा।`;
-
-
-        if (whatsapp && whatsapp.trim() !== '') {
-            message += `\n\n💬 WhatsApp: ${whatsapp} पर संदेश भेजने का अनुरोध (Backend Required).`;
-        } else {
-            message += `\n❌ WhatsApp नंबर खाली है, संदेश नहीं भेजा जाएगा।`;
-        }
-
-        message += `\n\n--- यह क्लाइंट-साइड लॉजिक है, असली भेजने के लिए आपको Firebase Cloud Functions या किसी अन्य सर्वर-साइड सेवा का उपयोग करना होगा।`;
-        
-        alert(message);
-    }
-    */
 
 
     // ------------------------------------------------------------------
-    // --- applyPreview (UNCHANGED as QTY column was already removed in original code) ---
+    // --- applyPreview (REVISED: Displaying Order Qty and Unit) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1277,7 +1381,10 @@
         const paintType = v('paint'); 
         
         document.getElementById('pvCustomer').textContent = v('customerName');
-        document.getElementById('pvQty').textContent = v('orderQty');
+        
+        // REVISED: Display Order Qty and Unit
+        document.getElementById('pvQty').textContent = `${v('orderQty')} ${v('orderQtyUnit')}`;
+        
         document.getElementById('pvChallan').textContent = v('challan');
         document.getElementById('pvPart').textContent = v('partDesc');
         document.getElementById('pvBatchNo').textContent = v('batchNo');
@@ -1295,7 +1402,7 @@
         } else {
             pvInspValue.textContent = 'N/A';
         }
-
+        
         document.getElementById('pvBaseBatch').textContent = v('baseBatch'); 
         document.getElementById('pvTopBatch').textContent = v('topBatch'); 
         
@@ -1308,35 +1415,73 @@
         
         const allRows = data.rows;
         let globalSr = 1; 
-        const requiredLength = (paintType === 'Silver' ? 9 : 10);
+        const requiredLength = 10; // Total 10 rows for table consistency
 
         allRows.forEach(r => {
+            
             const values = (r.observation || '').split(';').map(v => v.trim()); 
             const structure = PARAMETERS[r.operation]; 
             let singleObservationString = '';
             
             if(structure && structure.labels) {
+                // Map the observation values to parameter keys for easy access
+                let obsMap = {};
+                let valIndex = 0;
                  for (let j = 0; j < structure.labels.length; j++) {
                     const label = structure.labels[j];
-                    const unit = structure.units[j] || '';
-                    const value = values[j] || ''; 
+                    let paramKey = '';
                     
-                    if (label !== "N/A" && label.trim().length > 0 && value.length > 0) {
-                        const unitDisplay = (unit && unit.length > 0) ? `${unit}` : '';
-                        let obsPrefix = '';
-                        
-                        if (r.operation === "Incoming Inspection") { obsPrefix = ''; }
-                        else if (label.includes('Pointage')) obsPrefix = 'P-';
-                        else if (label.includes('Viscosity')) obsPrefix = 'V-';
-                        else if (label.includes('Temp') || label.includes('Time')) obsPrefix = 'T-';
-                        else if (label.includes('Speed')) obsPrefix = 'S-';
-                        else if (label.includes('Adhesion')) obsPrefix = 'A-';
-                        else if (label.includes('Thickness')) obsPrefix = 'T-'; 
-                        else if (label.includes('Qty')) obsPrefix = 'Q-'; // Qty is saved in row data but not shown in a dedicated column now
-                        
-                        singleObservationString += `${obsPrefix}${value}${unitDisplay} `; 
+                    if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
+                    else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
+                    else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
+                    else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
+                    else if (label.includes('Viscosity')) paramKey = 'Viscosity';
+                    else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
+                    else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                    else if (label.includes('Pointage')) paramKey = 'Pointage';
+                    else if (label.includes('Thickness')) paramKey = 'Thickness';
+                    else if (label.includes('Adhesion')) paramKey = 'Adhesion';
+                    else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
+                    else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
+                    else if (label.includes('Match')) paramKey = 'Match';
+                    else if (label.includes('Observation')) paramKey = 'Observation';
+
+                    if (paramKey) {
+                        obsMap[paramKey] = values[valIndex] || '';
+                        valIndex++;
                     }
                 }
+                
+                // Construct the string based on parameter types
+                let outputParts = [];
+
+                if (r.operation === "Incoming Inspection") {
+                    if(obsMap.Observation) outputParts.push(obsMap.Observation);
+                    // Inward Qty is now in General Info, removed here.
+                } else if (r.operation === "Packing & Dispatch") {
+                    if(obsMap.QtyValue) outputParts.push(`Q- ${obsMap.QtyValue} ${obsMap.QtyUnit || ''}`);
+                    if(obsMap.Match) outputParts.push(`M- ${obsMap.Match}`);
+                } else {
+                    // Standard operations
+                    if (obsMap.Observation) outputParts.push(`Obs: ${obsMap.Observation}`);
+                    if (obsMap.Pointage) outputParts.push(`P-${obsMap.Pointage} gms/l`);
+                    if (obsMap.Thickness) outputParts.push(`T-${obsMap.Thickness} microns`);
+                    if (obsMap.Adhesion) outputParts.push(`A-${obsMap.Adhesion}`);
+                    
+                    // Coating parameters
+                    if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
+                    if (obsMap.Speed) outputParts.push(`S-${obsMap.Speed} Hz`);
+                    if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
+                    
+                    // Temp parameters (only display the value)
+                    if (obsMap.PreHeatingTemp) outputParts.push(`PHT-${obsMap.PreHeatingTemp}`);
+                    if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
+                    if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
+                    if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
+                }
+                
+                singleObservationString = outputParts.join(' | ');
+
             } else {
                  singleObservationString = r.observation;
             }
@@ -1346,17 +1491,32 @@
             
             const tr = document.createElement('tr');
             const finalObservation = singleObservationString.trim();
+            
+            // Format Date (YYYY-MM-DD to DD/MM/YYYY)
+            let displayDate = r.dateShift || '';
+            if (displayDate.includes('-') && displayDate.length === 10) {
+                 const [y, m, d] = displayDate.split('-');
+                 displayDate = `${d}/${m}/${y}`;
+            } 
+            // Append shift time if available
+            if (r.shiftTime) {
+                 displayDate += r.dateShift ? ` / ${r.shiftTime}` : r.shiftTime; 
+            }
+            
+            // Time values are already HH:MM format from type="time"
+            const displayFromTime = r.fromTime || '';
+            const displayToTime = r.toTime || '';
 
             const rowContent = `
                 <td style="text-align:center">${globalSr}</td>
-                <td>${r.dateShift || ''}</td>
+                <td>${displayDate || ''}</td>
                 <td>${r.operation || ''}</td>
                 <td>${specification || ''}</td> 
                 <td style="font-size: 9px; line-height: 1.2;">${finalObservation}</td>
-                <td style="text-align:center">${r.fromTime || ''}</td>
-                <td style="text-align:center">${r.toTime || ''}</td>
+                <td style="text-align:center">${displayFromTime}</td>
+                <td style="text-align:center">${displayToTime}</td>
                 <td style="text-align:center; font-weight: bold;">${r.inspectionStatus || ''}</td> 
-                <td>${r.supervisorSign || ''}</td> `; // Qty column removed
+                <td>${r.supervisorSign || ''}</td> `; 
 
             tr.innerHTML = rowContent;
             tbody.appendChild(tr);
@@ -1370,10 +1530,10 @@
         
         let currentOutputRows = tbody.querySelectorAll('tr').length;
         
+        // Fill remaining rows with empty rows up to 10
         if (currentOutputRows < requiredLength) {
             for (let i = 0; i < requiredLength - currentOutputRows; i++) {
                 const tr = document.createElement('tr');
-                // Qty column removed, total 9 columns now
                 tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
                 tbody.appendChild(tr);
                 
@@ -1386,191 +1546,249 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (UNCHANGED as QTY column was already removed in original code) ---
+    // --- generatePdfWithAutoTable (REVISED: Time display is same as preview) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
-        const data = getFormData();
-        const v = (id) => document.getElementById(id)?.value || '';
-        const paintType = v('paint'); 
-        
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pageHeight = pdf.internal.pageSize.getHeight(); 
-        const bottomMargin = 10;
-        const availablePageEnd = pageHeight - bottomMargin; 
-        let yOffset = 15; 
+        try {
+            const data = getFormData();
+            const v = (id) => document.getElementById(id)?.value || '';
+            const paintType = v('paint'); 
+            
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageHeight = pdf.internal.pageSize.getHeight(); 
+            const bottomMargin = 10;
+            const availablePageEnd = pageHeight - bottomMargin; 
+            let yOffset = 15; 
 
-        // --- Header and Format No. ---
-        pdf.setFontSize(14);
-        pdf.text("JOB CARD / ROUTE CARD", 105, yOffset, null, null, "center");
-        yOffset += 7;
+            // --- Header and Format No. ---
+            pdf.setFontSize(14);
+            pdf.text("JOB CARD / ROUTE CARD", 105, yOffset, null, null, "center");
+            yOffset += 7;
 
-        pdf.setFontSize(6.5); 
-        pdf.text(`Format No: WT/PDR/11  |  REV. NO: 01  |  REV. DATE: 01.09.2025`, 105, yOffset, null, null, "center");
-        yOffset += 5;
-        
-        // --- General Info Table ---
-        const generalInfo = [
-            ["Customer Name", v('customerName'), "Order/Challan Qty", v('orderQty')],
-            ["Customer Challan No/Date", v('challan'), "Batch No.", v('batchNo')],
-            ["Part Desc/No", v('partDesc'), "Coating Spec", v('coatingSpec')]
-        ];
+            pdf.setFontSize(6.5); 
+            pdf.text(`Format No: WT/PDR/11  |  REV. NO: 01  |  REV. DATE: 01.09.2025`, 105, yOffset, null, null, "center");
+            yOffset += 5;
+            
+            // --- General Info Table ---
+            const generalInfo = [
+                ["Customer Name", v('customerName'), "Order/Challan Qty", `${v('orderQty')} ${v('orderQtyUnit')}`],
+                ["Customer Challan No/Date", v('challan'), "Batch No.", v('batchNo')],
+                ["Part Desc/No", v('partDesc'), "Coating Spec", v('coatingSpec')]
+            ];
 
-        pdf.autoTable({
-            startY: yOffset,
-            head: [],
-            body: generalInfo,
-            theme: 'grid',
-            styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2 },
-            columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' }, 2: { cellWidth: 30, fontStyle: 'bold' } },
-            didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-        });
+            pdf.autoTable({
+                startY: yOffset,
+                head: [],
+                body: generalInfo,
+                theme: 'grid',
+                styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2 },
+                columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' }, 2: { cellWidth: 30, fontStyle: 'bold' } },
+                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
+            });
 
-        // --- Coating Batch Table ---
-        const coatingInfo = [
-            [v('coatingSpec'), paintType === 'Black' ? v('blackInsp') : v('silverInsp'), v('baseBatch'), v('topBatch')]
-        ];
-        
-        pdf.autoTable({
-            startY: yOffset,
-            head: [['COATING SPECIFICATION', 'Paint', 'BASE COAT BATCH NO.', 'TOP COAT BATCH NO.']],
-            body: coatingInfo,
-            theme: 'grid',
-            styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2, halign: 'center' },
-            headStyles: { fillColor: [200, 200, 200], fontStyle: 'bold', fontSize: 6.5 },
-            didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-        });
-        
-        // --- Main Operations Table ---
-        
-        const mainHeader = [
-            'Sr No', 'Date/Shift', 'Operation', 'Specifications', 'Observation', 
-            'From Time', 'To Time', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'
-        ];
-        
-        const mainBody = [];
-        const allRows = data.rows;
-        let globalSr = 1;
-        const requiredLength = (paintType === 'Silver' ? 9 : 10);
+            // --- Coating Batch Table ---
+            const coatingInfo = [
+                [v('coatingSpec'), paintType === 'Black' ? v('blackInsp') : v('silverInsp'), v('baseBatch'), v('topBatch')]
+            ];
+            
+            pdf.autoTable({
+                startY: yOffset,
+                head: [['COATING SPECIFICATION', 'Paint', 'BASE COAT BATCH NO.', 'TOP COAT BATCH NO.']],
+                body: coatingInfo,
+                theme: 'grid',
+                styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2, halign: 'center' },
+                headStyles: { fillColor: [200, 200, 200], fontStyle: 'bold', fontSize: 6.5 },
+                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
+            });
+            
+            // --- Main Operations Table ---
+            
+            const mainHeader = [
+                'Sr No', 'Date/Shift', 'Operation', 'Specifications', 'Observation', 
+                'From Time', 'To Time', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'
+            ];
+            
+            const mainBody = [];
+            const allRows = data.rows;
+            let globalSr = 1;
+            const requiredLength = 10;
 
-        allRows.forEach(r => {
-            const values = (r.observation || '').split(';').map(v => v.trim()); 
-            const structure = PARAMETERS[r.operation]; 
-            let finalObservation = ''; 
+            allRows.forEach(r => {
+                
+                const values = (r.observation || '').split(';').map(v => v.trim()); 
+                const structure = PARAMETERS[r.operation]; 
+                let finalObservation = ''; 
 
-            if(structure && structure.labels) {
-                 for (let j = 0; j < structure.labels.length; j++) {
-                    const label = structure.labels[j];
-                    const unit = structure.units[j] || '';
-                    const value = values[j] || ''; 
-                    
-                    if (label !== "N/A" && label.trim().length > 0 && value.length > 0) {
-                        const unitDisplay = (unit && unit.length > 0) ? `${unit}` : '';
-                        let obsPrefix = '';
-                        if (r.operation === "Incoming Inspection") { obsPrefix = ''; }
-                        else if (label.includes('Pointage')) obsPrefix = 'P-';
-                        else if (label.includes('Viscosity')) obsPrefix = 'V-';
-                        else if (label.includes('Temp') || label.includes('Time')) obsPrefix = 'T-';
-                        else if (label.includes('Speed')) obsPrefix = 'S-';
-                        else if (label.includes('Adhesion')) obsPrefix = 'A-';
-                        else if (label.includes('Thickness')) obsPrefix = 'T-'; 
-                        else if (label.includes('Qty')) obsPrefix = 'Q-';
+                if(structure && structure.labels) {
+                    // Map the observation values to parameter keys for easy access
+                    let obsMap = {};
+                    let valIndex = 0;
+                     for (let j = 0; j < structure.labels.length; j++) {
+                        const label = structure.labels[j];
+                        let paramKey = '';
                         
-                        finalObservation += `${obsPrefix}${value}${unitDisplay} `; 
+                        if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
+                        else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
+                        else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
+                        else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
+                        else if (label.includes('Viscosity')) paramKey = 'Viscosity';
+                        else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
+                        else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                        else if (label.includes('Pointage')) paramKey = 'Pointage';
+                        else if (label.includes('Thickness')) paramKey = 'Thickness';
+                        else if (label.includes('Adhesion')) paramKey = 'Adhesion';
+                        else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
+                        else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
+                        else if (label.includes('Match')) paramKey = 'Match';
+                        else if (label.includes('Observation')) paramKey = 'Observation';
+
+                        if (paramKey) {
+                            obsMap[paramKey] = values[valIndex] || '';
+                            valIndex++;
+                        }
                     }
-                }
-            } else {
-                 finalObservation = r.observation;
-            }
-            
-            const specKey = r.operation.includes('Coat') ? `${paintType}_${r.operation}` : (r.operation === 'Final Inspection' ? `${r.operation}_${paintType}` : r.operation);
-            const specification = SPECIFICATIONS[specKey] || r.operation;
-            
-            mainBody.push([
-                globalSr,
-                r.dateShift || '',
-                r.operation || '',
-                specification || '', 
-                finalObservation.trim(),
-                r.fromTime || '',
-                r.toTime || '',
-                r.inspectionStatus || '', // Qty column removed
-                r.supervisorSign || '' 
-            ]);
-            globalSr++;
-        });
-        
-        while (mainBody.length < requiredLength) {
-            // Qty column removed (was 10th element)
-            mainBody.push([globalSr++, '', '', '', '', '', '', '', '']); 
-        }
-        
-        pdf.autoTable({
-            startY: yOffset,
-            head: [mainHeader],
-            body: mainBody,
-            theme: 'grid',
-            styles: { 
-                fontSize: 6.5, 
-                cellPadding: 0.8, 
-                lineColor: 0, 
-                lineWidth: 0.2, 
-                valign: 'middle', 
-                minCellHeight: 18.0 
-            },
-            headStyles: { 
-                fillColor: [200, 200, 200], 
-                fontStyle: 'bold', 
-                valign: 'middle', 
-                lineWidth: 0.2, 
-                lineColor: 0,
-                fontSize: 6.5 
-            },
-            columnStyles: {
-                0: { cellWidth: 8, halign: 'center' }, // Sr No (4)
-                1: { cellWidth: 15 }, // Date/Shift (10)
-                2: { cellWidth: 18 }, // Operation (12)
-                3: { cellWidth: 45 }, // Specifications (28) -> Increased
-                4: { cellWidth: 32 }, // Observation (18) -> Increased
-                5: { cellWidth: 12, halign: 'center' }, // From Time (7) -> Increased
-                6: { cellWidth: 12, halign: 'center' }, // To Time (7) -> Increased
-                7: { cellWidth: 15, halign: 'center' }, // Inspection OK/NOK (7) -> Increased
-                8: { cellWidth: 33 } // Operator/Supervisor/QA Signature (16) -> Increased
-                // Total width is now 8+15+18+45+32+12+12+15+33 = 190 mm (A4 width is 210mm)
-            },
-            didParseCell: (data) => {
-                if (data.section === 'body' && data.row.index === 0) {
-                     data.cell.styles.minCellHeight = 5.0; 
-                } else if (data.section === 'body') {
-                     data.cell.styles.minCellHeight = 18.0; 
+                    
+                    // Construct the string based on parameter types (PDF version)
+                    let outputParts = [];
+
+                    if (r.operation === "Incoming Inspection") {
+                        if(obsMap.Observation) outputParts.push(obsMap.Observation);
+                    } else if (r.operation === "Packing & Dispatch") {
+                        if(obsMap.QtyValue) outputParts.push(`Q- ${obsMap.QtyValue} ${obsMap.QtyUnit || ''}`);
+                        if(obsMap.Match) outputParts.push(`M- ${obsMap.Match}`);
+                    } else {
+                        // Standard operations
+                        if (obsMap.Observation) outputParts.push(`Obs: ${obsMap.Observation}`);
+                        if (obsMap.Pointage) outputParts.push(`P-${obsMap.Pointage} gms/l`);
+                        if (obsMap.Thickness) outputParts.push(`T-${obsMap.Thickness} microns`);
+                        if (obsMap.Adhesion) outputParts.push(`A-${obsMap.Adhesion}`);
+                        
+                        // Coating parameters
+                        if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
+                        if (obsMap.Speed) outputParts.push(`S-${obsMap.Speed} Hz`);
+                        if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
+                        
+                        // Temp parameters (only display the value)
+                        if (obsMap.PreHeatingTemp) outputParts.push(`PHT-${obsMap.PreHeatingTemp}`);
+                        if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
+                        if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
+                        if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
+                    }
+                    
+                    finalObservation = outputParts.join(' | ');
+
+                } else {
+                     finalObservation = r.observation;
                 }
                 
-                if (data.section === 'body' && data.column.dataKey === 4 && data.cell.text.length > 1) {
-                    data.cell.styles.fontSize = 5.5; 
+                const specKey = r.operation.includes('Coat') ? `${paintType}_${r.operation}` : (r.operation === 'Final Inspection' ? `${r.operation}_${paintType}` : r.operation);
+                const specification = SPECIFICATIONS[specKey] || r.operation;
+                
+                // Format Date (YYYY-MM-DD to DD/MM/YYYY) for PDF
+                let displayDate = r.dateShift || '';
+                if (displayDate.includes('-') && displayDate.length === 10) {
+                     const [y, m, d] = displayDate.split('-');
+                     displayDate = `${d}/${m}/${y}`;
+                } 
+                // Append shift time if available
+                if (r.shiftTime) {
+                    displayDate += displayDate ? ` / ${r.shiftTime}` : r.shiftTime;
                 }
-            },
-            didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-        });
-        
-        // --- Footer ---
-        let footerY = Math.max(pdf.autoTable.previous.finalY + 3, availablePageEnd - 10);
-        
-        pdf.setFontSize(6.5); 
-        pdf.text(`Verified By: ${v('verifiedBy')}`, 10, footerY);
-        pdf.text(`Approved By: ${v('approvedBy')}`, 200, footerY, null, null, 'right');
-        footerY += 4;
-        pdf.text(`Note - ${v('notes')}`, 10, footerY);
-        
-        // Custom Filename Logic
-        const custNameClean = v('customerName').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
-        const partNoClean = v('partDesc').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 10);
-        const challanClean = v('challan').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
-        
-        const fileName = `JobCard_${custNameClean}_${partNoClean}_${challanClean}.pdf`;
-        pdf.save(fileName);
+                
+                // Time values are already HH:MM format from type="time"
+                const displayFromTime = r.fromTime || '';
+                const displayToTime = r.toTime || '';
+                
+                
+                mainBody.push([
+                    globalSr,
+                    displayDate.trim() || '',
+                    r.operation || '',
+                    specification || '', 
+                    finalObservation.trim(),
+                    displayFromTime,
+                    displayToTime,
+                    r.inspectionStatus || '', 
+                    r.supervisorSign || '' 
+                ]);
+                globalSr++;
+            });
+            
+            while (mainBody.length < requiredLength) {
+                mainBody.push([globalSr++, '', '', '', '', '', '', '', '']); 
+            }
+            
+            pdf.autoTable({
+                startY: yOffset,
+                head: [mainHeader],
+                body: mainBody,
+                theme: 'grid',
+                styles: { 
+                    fontSize: 6.5, 
+                    cellPadding: 0.8, 
+                    lineColor: 0, 
+                    lineWidth: 0.2, 
+                    valign: 'middle', 
+                    minCellHeight: 18.0 
+                },
+                headStyles: { 
+                    fillColor: [200, 200, 200], 
+                    fontStyle: 'bold', 
+                    valign: 'middle', 
+                    lineWidth: 0.2, 
+                    lineColor: 0,
+                    fontSize: 6.5 
+                },
+                columnStyles: {
+                    0: { cellWidth: 8, halign: 'center' }, 
+                    1: { cellWidth: 15 }, 
+                    2: { cellWidth: 18 }, 
+                    3: { cellWidth: 45 }, 
+                    4: { cellWidth: 32 }, 
+                    5: { cellWidth: 12, halign: 'center' }, 
+                    6: { cellWidth: 12, halign: 'center' }, 
+                    7: { cellWidth: 15, halign: 'center' }, 
+                    8: { cellWidth: 33 } 
+                },
+                didParseCell: (data) => {
+                    if (data.section === 'body' && data.row.index === 0) {
+                         data.cell.styles.minCellHeight = 5.0; 
+                    } else if (data.section === 'body') {
+                         data.cell.styles.minCellHeight = 18.0; 
+                    }
+                    
+                    if (data.section === 'body' && data.column.dataKey === 4 && data.cell.text.length > 1) {
+                        data.cell.styles.fontSize = 5.5; 
+                    }
+                },
+                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
+            });
+            
+            // --- Footer ---
+            let footerY = Math.max(pdf.autoTable.previous.finalY + 3, availablePageEnd - 10);
+            
+            pdf.setFontSize(6.5); 
+            pdf.text(`Verified By: ${v('verifiedBy')}`, 10, footerY);
+            pdf.text(`Approved By: ${v('approvedBy')}`, 200, footerY, null, null, 'right');
+            footerY += 4;
+            pdf.text(`Note - ${v('notes')}`, 10, footerY);
+            
+            // Custom Filename Logic
+            const custNameClean = v('customerName').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
+            const partNoClean = v('partDesc').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 10);
+            const challanClean = v('challan').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
+            
+            const fileName = `JobCard_${custNameClean}_${partNoClean}_${challanClean}.pdf`;
+            pdf.save(fileName);
+            
+        } catch (error) {
+            console.error("PDF Generation Error:", error);
+            alert(`❌ PDF बनाने में त्रुटि: ${error.message}. कृपया ब्राउज़र के कंसोल (Console) में देखें.`);
+        }
     }
 
-    // --- Event Listeners (UPDATED: handleSendReport listener removed) ---
+    // --- Event Listeners (FINAL) ---
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
     document.getElementById('printBtn').addEventListener('click', () => {
         applyPreview(); 
@@ -1579,12 +1797,19 @@
     
     document.getElementById('applyBtn').addEventListener('click', applyPreview);
     document.getElementById('clearBtn').addEventListener('click', clearForm);
-    document.getElementById('updateOpsBtn').addEventListener('click', () => updateRowInputs(getFormData().rows)); 
-    document.getElementById('paint').addEventListener('change', () => updateRowInputs(getFormData().rows)); 
+    
+    // Call updateRowInputs and applyPreview on paint change
+    document.getElementById('paint').addEventListener('change', () => {
+        updateRowInputs(getFormData().rows); // Update the rows with new specs and inputs
+    });
+    
+    document.getElementById('updateOpsBtn').addEventListener('click', () => {
+        updateRowInputs(getFormData().rows); 
+    });
+
 
     document.getElementById('saveReport').addEventListener('click', handleSaveReport);
     document.getElementById('deleteReport').addEventListener('click', handleDeleteReport);
-    // document.getElementById('sendReportBtn').addEventListener('click', handleSendReport); // REMOVED
     
     document.getElementById('homeViewBtn').addEventListener('click', () => showView('home'));
     document.getElementById('formViewBtn').addEventListener('click', () => showView('form'));
@@ -1598,6 +1823,10 @@
         clearForm();
         showView('form');
     });
+    
+    // Add listeners for new Qty fields
+    document.getElementById('orderQty').addEventListener('input', applyPreview);
+    document.getElementById('orderQtyUnit').addEventListener('change', applyPreview);
     
     document.addEventListener('DOMContentLoaded', () => {
         clearForm(); 
