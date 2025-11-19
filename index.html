@@ -11,7 +11,7 @@
     // 🔒 SECURITY Enhancement: Disable Right Click and Developer Tools Access
     document.addEventListener('contextmenu', event => event.preventDefault()); 
     document.onkeydown = function(e) {
-        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J' || e.key === 'K'))) {
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.ctrlKey && e.shiftKey && e.key === 'J' || e.ctrlKey && e.shiftKey && e.key === 'K'))) {
             return false;
         }
         if (e.ctrlKey && e.key === 'u') {
@@ -54,6 +54,11 @@
             document.querySelectorAll('.form input, .form select, .form button:not(#loginButton, #signUpButton, #logoutButton, #homeViewBtn, #formViewBtn, #newJobFromHome)').forEach(el => {
                 el.disabled = !isLoggedIn;
             });
+             
+            // Re-enable form fields that need to run custom disabling logic later
+            document.getElementById('baseBatch').disabled = !isLoggedIn;
+            document.getElementById('topBatch').disabled = !isLoggedIn;
+
 
             document.getElementById('applyBtn').disabled = !isLoggedIn;
             document.getElementById('updateOpsBtn').disabled = !isLoggedIn;
@@ -67,6 +72,9 @@
             } else {
                  document.getElementById('saveReport').textContent = '⚠️ Log In to Save';
             }
+            
+            // Important: Re-apply batch validation to set the correct state for coating ops
+            window.handleBatchNoValidation();
         };
 
         window.handleAuthAction = async (actionType) => {
@@ -456,8 +464,8 @@
       <div class="inspection-codes-grid">
           <div id="silverInspDiv" class="hide-inspection"><label>Silver Paint Name</label><input id="silverInsp" type="text" placeholder="Silver Paint Name" value="Silver Paint" /></div>
           <div id="blackInspDiv"><label>Black Paint Name</label><input id="blackInsp" type="text" placeholder="Black Paint Name" value="Black Paint" /></div>
-          <div><label>Base Coat Batch No.</label><input id="baseBatch" type="text" placeholder="Base Coat Batch No" value="BCB101" /></div>
-          <div><label>Top Coat Batch No.</label><input id="topBatch" type="text" placeholder="Top Coat Batch No" value="TCB202" /></div>
+          <div><label>Base Coat Batch No.</label><input id="baseBatch" type="text" placeholder="Base Coat Batch No" value="" /></div>
+          <div><label>Top Coat Batch No.</label><input id="topBatch" type="text" placeholder="Top Coat Batch No" value="" /></div>
       </div>
       
       <div class="top-grid" style="display:none; margin-top: -5px;">
@@ -472,20 +480,12 @@
       
       <label>Verified By
         <select id="verifiedBy">
-            <option value="N/A" selected>N/A</option>
-            <option value="SAKSHI CHAVHAN">SAKSHI CHAVHAN</option>
-            <option value="KOMAL TAYADE">KOMAL TAYADE</option>
-            <option value="MANOJ SHAH">MANOJ SHAH</option>
-        </select>
+            </select>
       </label>
       
       <label>Approved By
         <select id="approvedBy">
-            <option value="N/A" selected>N/A</option>
-            <option value="ABHIJEET DHOKRAT">ABHIJEET DHOKRAT</option>
-            <option value="MANOJ SHAH">MANOJ SHAH</option>
-            <option value="SURAJ KUMAR">SURAJ KUMAR</option>
-        </select>
+            </select>
       </label>
       
       <label>Notes<input id="notes" type="text" placeholder="Notes / Remark" value="P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion." /></label>
@@ -575,7 +575,8 @@
     // UPDATED: Added orderQtyUnit to jobFields
     const jobFields = ['customerName', 'orderQty', 'orderQtyUnit', 'challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
     
-    // START: FIX 1 - Setting N/A as the primary default option
+    // --- UPDATED: Supervisor/Signature List (Operator/QA/Supervisor) ---
+    // VINAYAK PAWAR IS REMOVED from this list per request
     const SUPERVISORS = [
         "N/A", // Now the default selected option
         "MANOJ SHAH", 
@@ -584,18 +585,46 @@
         "SAKSHI CHAVHAN", 
         "KOMAL TAYADE",
         "ABHIJEET DHOKRAT",
+        "BALAJI KATURE", 
+        "SACHIN WALTURE", 
+        "VISHNU SABLE", 
+        "VINOD SELOKAR"
     ];
-    // END: FIX 1
+
+    // --- NEW: Verified/Approved By List (Includes Vinayak Pawar) ---
+    const VERIFIED_APPROVED_BY = [
+        "N/A",
+        "SACHIN WALTURE",
+        "ABHIJEET DHOKRAT",
+        "VINAYAK PAWAR" // Vinayak Pawar is only here
+    ];
+    // --- END UPDATED LISTS ---
 
     // --- TEMPERATURE SPECIFICATIONS (Ranges for Select Options) ---
     const TEMPERATURE_SPECS = {
-        Geopert: { pre: ["280°C"], main: ["360°C"] },
+        // Geopert pre Heating 150 degree change krdo. <-- REQUEST 1 IMPLEMENTED HERE
+        Geopert: { pre: ["150°C"], main: ["360°C"] }, 
         Aquazinc: { pre: ["N/A"], main: ["180°C", "200°C"] }, 
         Zintek: { pre: ["220°C"], main: ["280°C"] },
         // Techdip temp based on user's note
         Techdip: { pre: ["220°C"], main: ["260°C"] }, 
         Drying: { pre: ["100°C", "150°C", "220°C"], main: []}
     };
+    
+    // --- NEW/UPDATED: Speed Specification Options ---
+    const SPEED_OPTIONS = [
+        { value: "3.38 Hz", label: "3.38 Hz" },
+        { value: "5 Hz", label: "5 Hz" },
+        { value: "30 min-box oven", label: "30 min-box oven" } // Added 30min-box oven
+    ];
+
+    /**
+     * Helper to get Speed options.
+     * @returns {Array} Array of speed options.
+     */
+    function getSpeedOptions() {
+        return SPEED_OPTIONS;
+    }
 
     // --- UPDATED: SPECIFICATIONS (Including new Viscosity values) ---
     const SPECIFICATIONS = {
@@ -609,8 +638,9 @@
         "Final Inspection_Black": "No uncover coating, no excess paint in thread & socket, Adhesion test should be clean. Black Thickness range - 8 to 16 microns",
         
         // --- UPDATED VISCOSITY: Geopert 60-90 sec ---
-        "Silver_Base Coat -1 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (280°C), Main Heating Temp (360°C)",
-        "Silver_Base Coat -2 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (280°C), Main Heating Temp (360°C)",
+        // Note: PHT is 150°C as per Request 1
+        "Silver_Base Coat -1 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (150°C), Main Heating Temp (360°C)",
+        "Silver_Base Coat -2 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (150°C), Main Heating Temp (360°C)",
         "Silver_Top Coat -1 & Curing": "Aquazinc: Viscosity - 28-38 sec, time - 30 mins., Baking Temp (180°C/200°C)", 
         
         // --- UPDATED VISCOSITY: Zintek 33-38 sec ---
@@ -620,16 +650,21 @@
         "Black_Top Coat -2 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
     };
     
-    // --- UPDATED: PARAMETERS (Incoming Inspection simplified; Packing & Dispatch keeps Qty Unit select) ---
+    // --- UPDATED: PARAMETERS (Speed is now a Select field for Base Coat) ---
     const PARAMETERS = {
         "Incoming Inspection": { labels: ["Observation"], units: [""] }, 
         "Alkaline Cleaning": { labels: ["Pointage"], units: ["gms/litre"] }, 
         "Drying": { labels: ["Temp (Select)", "Time"], units: ["°C", "min"], useTempSelect: true, tempType: 'Drying' }, 
         "Shot Blasting": { labels: ["Time"], units: ["min"] },
-        "Base Coat -1 & Curing": { labels: ["Viscosity", "Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
-        "Base Coat -2 & Curing": { labels: ["Viscosity", "Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
+        
+        // MODIFIED: Speed is now (Select)
+        "Base Coat -1 & Curing": { labels: ["Viscosity", "Speed (Select)", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
+        "Base Coat -2 & Curing": { labels: ["Viscosity", "Speed (Select)", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
+        
+        // Top Coat speed remains input/time-speed
         "Top Coat -1 & Curing": { labels: ["Viscosity", "Time/Speed", "Baking Temp (Select)"], units: ["sec", "min/Hz", "°C"], isCoating: true, tempType: 'Top' },
         "Top Coat -2 & Curing": { labels: ["Viscosity", "Time/Speed", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "min/Hz", "°C", "°C"], isCoating: true, tempType: 'Top' },
+        
         "Final Inspection": { labels: ["Thickness", "Adhesion"], units: ["microns", ""] },
         "Packing & Dispatch": { labels: ["Dispatch Qty", "Qty Unit", "Match"], units: ["", "", ""], isQtySelect: true },
         "Spare Operation": { labels: ["N/A"], units: [""] },
@@ -742,9 +777,25 @@
         
         return { pre: preTemps, main: mainTemps };
     }
+    
+    // --- initSignatureSelectors (NEW/MODIFIED: To populate the two separate lists) ---
+    function initSignatureSelectors() {
+        const verifiedBySelect = document.getElementById('verifiedBy');
+        const approvedBySelect = document.getElementById('approvedBy');
+        
+        const generateOptions = (list, selectedValue = 'N/A') => {
+            let optionsHTML = list.map(name => 
+                `<option value="${name}" ${selectedValue === name ? 'selected' : ''}>${name}</option>`
+            ).join('');
+            return optionsHTML;
+        };
+
+        verifiedBySelect.innerHTML = generateOptions(VERIFIED_APPROVED_BY, verifiedBySelect.value);
+        approvedBySelect.innerHTML = generateOptions(VERIFIED_APPROVED_BY, approvedBySelect.value);
+    }
 
 
-    // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, and TIME) ---
+    // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, TIME, and now Speed) ---
     function updateRowInputs(savedRows = []) {
         
         const predefinedOperations = getCurrentPredefinedOperations();
@@ -769,7 +820,7 @@
                     else if (label.includes('Temp')) paramKey = 'Temp';
                     else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                     else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
-                    else if (label.includes('Speed')) paramKey = 'Speed';
+                    else if (label.includes('Speed')) paramKey = 'Speed'; // Catches both "Speed" and "Speed (Select)"
                     else if (label.includes('Pointage')) paramKey = 'Pointage';
                     else if (label.includes('Thickness')) paramKey = 'Thickness';
                     else if (label.includes('Adhesion')) paramKey = 'Adhesion';
@@ -803,7 +854,7 @@
             const opName = opConfig.op;
             const opParams = PARAMETERS[opName];
             
-            const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: '' };
+            const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: 'N/A' }; // Set default sign to N/A
             
             const div = document.createElement('div');
             div.dataset.sr = srCount;
@@ -812,7 +863,7 @@
             
             let obsFieldsHTML = '';
             
-            const specKey = opName.includes('Coat') ? `${paintType}_${opName}` : (opName === 'Final Inspection' ? `${opName}_${paintType}` : opName);
+            const specKey = opName.includes('Coat') ? `${paintType}_${opName}` : (opName === 'Final Inspection' ? `${paintType}_${opName}` : opName);
             const specification = SPECIFICATIONS[specKey] || opName;
 
             opParams.labels.forEach((label) => {
@@ -820,7 +871,8 @@
                     const unit = ''; 
                     // Determine the unique parameter key
                     let paramKey = '';
-                    const isSelectField = label.includes('(Select)');
+                    const isSelectField = label.includes('(Select)') && !label.includes('Speed'); // Exclude Speed for its dedicated logic
+                    const isSpeedSelect = label.includes('Speed (Select)'); // New check for speed
                     const isQtyUnit = label.includes('Qty Unit');
                     
                     if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
@@ -836,7 +888,7 @@
                     else if (label.includes('Dispatch Qty')) paramKey = 'QtyValue'; 
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
-                    else if (label.includes('Observation') && !label.includes('Qty')) paramKey = 'Observation';
+                    else if (label.includes('Observation')) paramKey = 'Observation';
 
                     if (!paramKey) return; // Skip if no key is defined
                     
@@ -888,7 +940,23 @@
                                 </select>
                             </div>
                         `;
+                    } else if (isSpeedSelect) { // --- NEW: Speed Select Logic ---
+                        const speedOptions = getSpeedOptions();
                         
+                        let selectOptionsHTML = `<option value="">-- Select Speed --</option>`;
+                        speedOptions.forEach(s => {
+                            const selected = (savedValue === s.value) ? 'selected' : '';
+                            selectOptionsHTML += `<option value="${s.value}" ${selected}>${s.label}</option>`;
+                        });
+
+                        obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder}</label>
+                                <select data-field="obsParam" data-param="${paramKey}">
+                                    ${selectOptionsHTML}
+                                </select>
+                            </div>
+                        `;
                     } else {
                          obsFieldsHTML += `
                             <div>
@@ -916,9 +984,11 @@
                 </div>
             `;
             
+            // --- UPDATED: Use SUPERVISORS list which excludes Vinayak Pawar ---
             let supervisorOptionsHTML = SUPERVISORS.map(name => 
                 `<option value="${name}" ${savedData.supervisorSign === name ? 'selected' : ''}>${name}</option>`
             ).join('');
+            // --- END UPDATED ---
 
             
             div.innerHTML = `
@@ -969,7 +1039,76 @@
         });
         
         applyPreview(); 
+        handleOperationFieldDisabling(); // **NEW CALL**: Disable/enable fields based on batch numbers
     }
+    
+    // START: NEW FUNCTION FOR BATCH NUMBER VALIDATION (REQUEST 2 - PART 1)
+    window.handleBatchNoValidation = function() {
+        const batchNoInput = document.getElementById('batchNo');
+        const baseBatchInput = document.getElementById('baseBatch');
+        const topBatchInput = document.getElementById('topBatch');
+        
+        const isUserLoggedIn = window.auth.currentUser !== null;
+        
+        // Check if the main Batch No. field is filled
+        const isBatchNoFilled = batchNoInput.value.trim().length > 0;
+
+        // Base/Top Batch inputs are only active if logged in AND main Batch No. is filled
+        baseBatchInput.disabled = !(isUserLoggedIn && isBatchNoFilled);
+        topBatchInput.disabled = !(isUserLoggedIn && isBatchNoFilled);
+        
+        // If the main batch no is empty, ensure sub-batch fields are blank/empty
+        if (!isBatchNoFilled) {
+            baseBatchInput.value = '';
+            topBatchInput.value = '';
+        }
+        
+        // Call the new operation disabling function
+        handleOperationFieldDisabling();
+        
+        // Update preview after validation
+        applyPreview(); 
+    }
+    // END: NEW FUNCTION FOR BATCH NUMBER VALIDATION
+
+    // START: NEW FUNCTION FOR OPERATION FIELD DISABLING (REQUEST 2 - PART 2)
+    function handleOperationFieldDisabling() {
+        const isUserLoggedIn = window.auth.currentUser !== null;
+        if (!isUserLoggedIn) return; // Skip if user is logged out (updateActionButtons handles overall disabling)
+
+        const baseBatchFilled = document.getElementById('baseBatch').value.trim().length > 0;
+        const topBatchFilled = document.getElementById('topBatch').value.trim().length > 0;
+        
+        // Coating operations are enabled ONLY if both Base and Top batches are filled
+        const shouldDisableCoatingOps = !(baseBatchFilled && topBatchFilled);
+
+        document.getElementById('rowsInput').querySelectorAll('.row-group').forEach((group, index) => {
+            const srCount = index + 1;
+            
+            // Coating operations start from Sr No 5 onwards
+            // Note: Coating steps can vary (Silver=3, Black=4), but all start at 5
+            if (srCount >= 5) { 
+                group.querySelectorAll('input, select').forEach(input => {
+                    input.disabled = shouldDisableCoatingOps;
+                    
+                    // Clear the fields if they are disabled to prevent filling data accidentally
+                    if (shouldDisableCoatingOps) {
+                        if (input.type === 'text' || input.type === 'date' || input.type === 'time') {
+                            input.value = '';
+                        } else if (input.tagName === 'SELECT' && input.dataset.field !== 'inspectionStatus' && input.dataset.field !== 'supervisorSign') {
+                            // Only reset time/shift/temp/speed selects, not OK/NOK or Signature
+                            input.selectedIndex = 0; 
+                        }
+                    }
+                });
+            } else {
+                 // Sr 1 to 4 (Pre-Operations) should remain enabled as long as the user is logged in
+                 // Disabling is handled by updateActionButtons (if !isLoggedIn)
+            }
+        });
+        applyPreview();
+    }
+    // END: NEW FUNCTION FOR OPERATION FIELD DISABLING
 
     // --- getFormData (REVISED: Added shiftTime field to data collection) ---
     function getFormData() {
@@ -1001,7 +1140,11 @@
         
         let observationValues = [];
         
-        if(opParams && opParams.labels) {
+        // Skip collecting data if the operation fields are disabled (i.e. if batch numbers are missing)
+        const isCoatingOp = index + 1 >= 5;
+        const isCoatingDisabled = isCoatingOp && group.querySelector('input, select')?.disabled;
+        
+        if (opParams && opParams.labels && !isCoatingDisabled) { // Only collect data if not disabled
             opParams.labels.forEach((label) => {
                 if (label !== "N/A" && label.trim().length > 0) {
                     let paramKey = '';
@@ -1012,7 +1155,7 @@
                     else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
                     else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                     else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
-                    else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                    else if (label.includes('Speed')) paramKey = 'Speed'; // Catches both "Speed" and "Speed (Select)"
                     else if (label.includes('Pointage')) paramKey = 'Pointage';
                     else if (label.includes('Thickness')) paramKey = 'Thickness';
                     else if (label.includes('Adhesion')) paramKey = 'Adhesion';
@@ -1031,33 +1174,49 @@
                 }
             });
         }
-        
-        const observation = observationValues.join('; ').trim(); 
 
-        const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
-        // Use select for shiftTime
-        const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
+        let observation = isCoatingDisabled ? '' : observationValues.join('; ').trim();
         
-        // Use type="time" for time fields
+        const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
+        const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
         const fromTimeValue = group.querySelector('input[data-field="fromTime"]').value;
         const toTimeValue = group.querySelector('input[data-field="toTime"]').value;
-        
-        // Skip spare if empty
+        const inspectionStatus = group.querySelector('select[data-field="inspectionStatus"]').value;
+        const supervisorSign = group.querySelector('select[data-field="supervisorSign"]').value;
+
+        // Skip spare if empty AND isCoatingDisabled check is false (i.e., pre-ops only)
         if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '' && shiftTimeValue === '') return;
         
-        rows.push({
-          sr: index + 1,
-          dateShift: dateShiftValue,
-          shiftTime: shiftTimeValue, // Now uses select value
-          observation: observation, 
-          fromTime: fromTimeValue,
-          toTime: toTimeValue,
-          qty: '', 
-          inspectionStatus: group.querySelector('select[data-field="inspectionStatus"]').value, 
-          operatorChecked: '', 
-          supervisorSign: group.querySelector('select[data-field="supervisorSign"]').value, 
-          operation: operation, 
-        });
+        // Ensure coating ops have blank data if disabled, but still include the row to preserve structure
+        if (isCoatingDisabled) {
+             rows.push({
+                sr: index + 1,
+                dateShift: '',
+                shiftTime: '', 
+                observation: '', 
+                fromTime: '',
+                toTime: '',
+                qty: '', 
+                inspectionStatus: 'N/A', 
+                operatorChecked: '', 
+                supervisorSign: 'N/A', 
+                operation: operation, 
+            });
+        } else {
+             rows.push({
+              sr: index + 1,
+              dateShift: dateShiftValue,
+              shiftTime: shiftTimeValue, // Now uses select value
+              observation: observation, 
+              fromTime: fromTimeValue,
+              toTime: toTimeValue,
+              qty: '', 
+              inspectionStatus: inspectionStatus, 
+              operatorChecked: '', 
+              supervisorSign: supervisorSign, 
+              operation: operation, 
+            });
+        }
       });
       data.rows = rows;
       
@@ -1084,8 +1243,10 @@
         currentActiveReportId = data.uniqueId || null; 
         document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId && !currentActiveReportId.startsWith('NEW') ? currentActiveReportId : '-- New --'}`;
         
+        initSignatureSelectors(); // Re-initialize selectors to ensure correct list
         updateRowInputs(data.rows || []); 
         window.updateActionButtons(data); 
+        handleBatchNoValidation(); // Call validation on setting form data
     }
 
     function clearForm() {
@@ -1106,17 +1267,18 @@
         document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
         document.getElementById('batchNo').value = "250819"; 
         
-        // START: FIX 2 - Setting default sign-off to "N/A"
+        // --- UPDATED: Set default sign-off to "N/A" for the VERIFIED_APPROVED_BY list
+        initSignatureSelectors();
         document.getElementById('verifiedBy').value = "N/A";
         document.getElementById('approvedBy').value = "N/A";
-        // END: FIX 2
+        // --- END UPDATED ---
         
         document.getElementById('notes').value = "P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion.";
         document.getElementById('paint').value = 'Black'; 
         document.getElementById('silverInsp').value = 'Silver Paint';
         document.getElementById('blackInsp').value = 'Black Paint';
-        document.getElementById('baseBatch').value = 'BCB101';
-        document.getElementById('topBatch').value = 'TCB202';
+        document.getElementById('baseBatch').value = ''; // BLANKED as per request
+        document.getElementById('topBatch').value = ''; // BLANKED as per request
 
         const statusEl = document.getElementById('statusField');
         if (statusEl) statusEl.value = 'Running';
@@ -1131,6 +1293,7 @@
         updateRowInputs(); 
         applyPreview();
         window.updateActionButtons(null); 
+        handleBatchNoValidation(); // Call validation after clearing the form
     }
     
     // --- CLOUD LOGIC FUNCTIONS (UNCHANGED) ---
@@ -1364,7 +1527,7 @@
 
 
     // ------------------------------------------------------------------
-    // --- applyPreview (REVISED: Dynamically sets requiredLength for 9/10 rows) ---
+    // --- applyPreview (REVISED: Updated logic for Speed display) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1433,7 +1596,7 @@
                     else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
                     else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                     else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
-                    else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                    else if (label.includes('Speed')) paramKey = 'Speed';
                     else if (label.includes('Pointage')) paramKey = 'Pointage';
                     else if (label.includes('Thickness')) paramKey = 'Thickness';
                     else if (label.includes('Adhesion')) paramKey = 'Adhesion';
@@ -1466,7 +1629,13 @@
                     
                     // Coating parameters
                     if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
-                    if (obsMap.Speed) outputParts.push(`S-${obsMap.Speed} Hz`);
+                    
+                    // MODIFIED: Speed logic
+                    if (obsMap.Speed) {
+                         const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz';
+                         outputParts.push(`S-${obsMap.Speed}${unit}`);
+                    }
+                    
                     if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
                     
                     // Temp parameters (only display the value)
@@ -1542,7 +1711,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (REVISED: Dynamically sets requiredLength for 9/10 rows) ---
+    // --- generatePdfWithAutoTable (REVISED: Updated logic for Speed display) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         try {
@@ -1633,7 +1802,7 @@
                         else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
                         else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                         else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
-                        else if (label.includes('Speed') && !label.includes('Time/Speed')) paramKey = 'Speed';
+                        else if (label.includes('Speed')) paramKey = 'Speed';
                         else if (label.includes('Pointage')) paramKey = 'Pointage';
                         else if (label.includes('Thickness')) paramKey = 'Thickness';
                         else if (label.includes('Adhesion')) paramKey = 'Adhesion';
@@ -1665,7 +1834,13 @@
                         
                         // Coating parameters
                         if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
-                        if (obsMap.Speed) outputParts.push(`S-${obsMap.Speed} Hz`);
+                        
+                        // MODIFIED: Speed logic
+                        if (obsMap.Speed) {
+                             const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz';
+                             outputParts.push(`S-${obsMap.Speed}${unit}`);
+                        }
+                        
                         if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
                         
                         // Temp parameters (only display the value)
@@ -1786,7 +1961,7 @@
             alert(`❌ PDF बनाने में त्रुटि: ${error.message}. कृपया ब्राउज़र के कंसोल (Console) में देखें.`);
         }
     }
-
+    
     // --- Event Listeners (FINAL) ---
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
     document.getElementById('printBtn').addEventListener('click', () => {
@@ -1827,9 +2002,19 @@
     document.getElementById('orderQty').addEventListener('input', applyPreview);
     document.getElementById('orderQtyUnit').addEventListener('change', applyPreview);
     
+    // NEW: Batch No validation listener
+    document.getElementById('batchNo').addEventListener('input', handleBatchNoValidation);
+    
+    // NEW: Listeners for Base/Top Batch No. to control operation fields
+    document.getElementById('baseBatch').addEventListener('input', handleOperationFieldDisabling);
+    document.getElementById('topBatch').addEventListener('input', handleOperationFieldDisabling);
+    
+    // Set up initial state on load
     document.addEventListener('DOMContentLoaded', () => {
+        // Initialize the two signature selectors once DOM is ready
+        initSignatureSelectors(); 
         clearForm(); 
     });
   </script>
 </body>
-</html>
+</html
