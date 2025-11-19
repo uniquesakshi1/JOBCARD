@@ -617,6 +617,14 @@
         { value: "5 Hz", label: "5 Hz" },
         { value: "30 min-box oven", label: "30 min-box oven" } // Added 30min-box oven
     ];
+    
+    // --- NEW: Machine No. Options ---
+    const MACHINE_OPTIONS = [
+        { value: "N/A", label: "-- Select Machine --" },
+        { value: "Machine 1 (300kg)", label: "Machine 1 (300kg)" },
+        { value: "Machine 2 (100kg)", label: "Machine 2 (100kg)" },
+        { value: "Machine 3 (40kg)", label: "Machine 3 (40kg)" }
+    ];
 
     /**
      * Helper to get Speed options.
@@ -625,13 +633,22 @@
     function getSpeedOptions() {
         return SPEED_OPTIONS;
     }
+    
+     /**
+     * Helper to get Machine options.
+     * @returns {Array} Array of machine options.
+     */
+    function getMachineOptions() {
+        return MACHINE_OPTIONS;
+    }
 
-    // --- UPDATED: SPECIFICATIONS (Including new Viscosity values) ---
+    // --- UPDATED: SPECIFICATIONS (Including new Machine No. and Cycle Time) ---
     const SPECIFICATIONS = {
         "Incoming Inspection": "Dent free, no heavy rust or oil, gauge fitment",
         "Alkaline Cleaning": "45-65 gms/litre",
         "Drying": "Temp (100-220°C) & Time(15-30 mins)", 
-        "Shot Blasting": "15 to 30 mins", 
+        // 🚨 MODIFIED: Shot Blasting specification updated to include Machine No., Time, and Cycle Time
+        "Shot Blasting": "Machine No., Time (15 to 30 mins) & Cycle Time (min)", 
         "Packing & Dispatch": "Qty (value), Match Check", 
         "Spare Operation": "N/A",
         "Final Inspection_Silver": "No uncover coating, no excess paint in thread & socket, Adhesion test should be clean. Silver Thickness range - 6 to 12 microns",
@@ -650,12 +667,13 @@
         "Black_Top Coat -2 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
     };
     
-    // --- UPDATED: PARAMETERS (Speed is now a Select field for Base Coat) ---
+    // --- UPDATED: PARAMETERS (Added Machine No. select and Cycle Time input) ---
     const PARAMETERS = {
         "Incoming Inspection": { labels: ["Observation"], units: [""] }, 
         "Alkaline Cleaning": { labels: ["Pointage"], units: ["gms/litre"] }, 
         "Drying": { labels: ["Temp (Select)", "Time"], units: ["°C", "min"], useTempSelect: true, tempType: 'Drying' }, 
-        "Shot Blasting": { labels: ["Time"], units: ["min"] },
+        // 🚨 MODIFIED: Machine No. is now a select. Added Cycle Time Input.
+        "Shot Blasting": { labels: ["Machine No. (Select)", "Time", "Cycle Time"], units: ["", "min", "min"], usesCycleTime: true },
         
         // MODIFIED: Speed is now (Select)
         "Base Coat -1 & Curing": { labels: ["Viscosity", "Speed (Select)", "Pre-Heating Temp (Select)", "Main Heating Temp (Select)"], units: ["sec", "Hz", "°C", "°C"], isCoating: true, tempType: 'Base' },
@@ -794,8 +812,22 @@
         approvedBySelect.innerHTML = generateOptions(VERIFIED_APPROVED_BY, approvedBySelect.value);
     }
 
+    // 🚨 NEW/MODIFIED: Cycle Time Calculation Helper (Not used anymore as we have an input field)
+    /*
+    function calculateCycleTime(fromTime, toTime) {
+        if (!fromTime || !toTime) return '';
 
-    // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, TIME, and now Speed) ---
+        try {
+            // ... (Removed the automatic cycle time calculation)
+        } catch (e) {
+            console.warn("Cycle Time Calculation Error:", e);
+            return '';
+        }
+    }
+    */
+
+
+    // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, TIME, Speed, and now Machine No.) ---
     function updateRowInputs(savedRows = []) {
         
         const predefinedOperations = getCurrentPredefinedOperations();
@@ -807,7 +839,20 @@
             const dataMap = {};
             rows.forEach(r => {
                 const opParams = PARAMETERS[r.operation] || { labels: [], units: [] };
-                const values = (r.observation || '').split(';').map(v => v.trim()); 
+                
+                // IMPORTANT: Cycle Time is no longer appended to the observation string, 
+                // but we need to remove it from old saved data if it exists.
+                let observationString = r.observation || '';
+                let cycleTimeValueFromObs = '';
+                const parts = observationString.split(';').map(v => v.trim());
+                const cycleTimeIndex = parts.findIndex(p => p.startsWith('Cycle Time: '));
+                if (cycleTimeIndex !== -1) {
+                    cycleTimeValueFromObs = parts[cycleTimeIndex].replace('Cycle Time: ', '');
+                    parts.splice(cycleTimeIndex, 1);
+                    observationString = parts.join('; ');
+                }
+                
+                const values = observationString.split(';').map(v => v.trim()); 
                 const obsValues = {};
                 
                 // --- Logic to correctly map saved values to data-param keys ---
@@ -828,20 +873,30 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation')) paramKey = 'Observation';
+                    // 🚨 NEW: Machine No.
+                    else if (label.includes('Machine No.')) paramKey = 'MachineNo';
+                    // 🚨 NEW: Cycle Time (must be checked after other fields in PARAMETERS)
+                    else if (label.includes('Cycle Time')) paramKey = 'CycleTime';
 
-                    if (paramKey && values[valueIndex] !== undefined) {
+
+                    if (paramKey && values[valueIndex] !== undefined && paramKey !== 'CycleTime') {
                         obsValues[paramKey] = values[valueIndex] || '';
                         valueIndex++;
+                    } else if (paramKey === 'CycleTime') {
+                        // For Cycle Time, use the separate saved field first, then fallback to old observation data
+                        obsValues[paramKey] = r.cycleTime || cycleTimeValueFromObs; 
                     }
+
                 });
                 // --- End Logic ---
                 
                 dataMap[r.operation] = { 
                     ...r, 
                     obsValues, 
+                    cycleTime: r.cycleTime || cycleTimeValueFromObs, // Store Cycle Time separately
                     inspectionStatus: r.inspectionStatus || 'N/A',
                     operatorChecked: r.operatorChecked || '', 
-                    supervisorSign: r.supervisorSign || ''
+                    supervisorSign: r.supervisorSign || 'N/A'
                 }; 
             });
             return dataMap;
@@ -854,7 +909,7 @@
             const opName = opConfig.op;
             const opParams = PARAMETERS[opName];
             
-            const savedData = savedDataMap[opName] || { obsValues: {}, inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: 'N/A' }; // Set default sign to N/A
+            const savedData = savedDataMap[opName] || { obsValues: {}, cycleTime: '', inspectionStatus: 'N/A', operatorChecked: '', supervisorSign: 'N/A' }; // Set default sign to N/A
             
             const div = document.createElement('div');
             div.dataset.sr = srCount;
@@ -871,9 +926,11 @@
                     const unit = ''; 
                     // Determine the unique parameter key
                     let paramKey = '';
-                    const isSelectField = label.includes('(Select)') && !label.includes('Speed'); // Exclude Speed for its dedicated logic
-                    const isSpeedSelect = label.includes('Speed (Select)'); // New check for speed
+                    const isSelectField = label.includes('(Select)') && !label.includes('Speed') && !label.includes('Machine No.'); 
+                    const isSpeedSelect = label.includes('Speed (Select)');
+                    const isMachineSelect = label.includes('Machine No. (Select)'); // NEW check for machine
                     const isQtyUnit = label.includes('Qty Unit');
+                    const isCycleTimeInput = label.includes('Cycle Time'); // NEW check for cycle time input
                     
                     if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
                     else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
@@ -889,11 +946,18 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation')) paramKey = 'Observation';
+                    // 🚨 NEW: Machine No.
+                    else if (label.includes('Machine No.')) paramKey = 'MachineNo';
+                    // 🚨 NEW: Cycle Time
+                    else if (label.includes('Cycle Time')) paramKey = 'CycleTime';
+
 
                     if (!paramKey) return; // Skip if no key is defined
                     
                     const placeholder = `${label.replace('(Select)', '').trim()}`;
-                    const savedValue = savedData.obsValues[paramKey] || '';
+                    
+                    // Determine saved value: CycleTime has its own key on savedData, others are in obsValues
+                    const savedValue = (paramKey === 'CycleTime') ? savedData.cycleTime : (savedData.obsValues[paramKey] || '');
                     
                     if (isSelectField) {
                         const tempOptions = getTemperatureOptions(opName, paintType);
@@ -905,7 +969,6 @@
                             options = tempOptions.main;
                         }
                         
-                        // If no options are available (e.g., Aquazinc pre-heating), skip this select field
                         if (options.length === 0 && (paramKey === 'PreHeatingTemp')) {
                             return; 
                         }
@@ -940,7 +1003,7 @@
                                 </select>
                             </div>
                         `;
-                    } else if (isSpeedSelect) { // --- NEW: Speed Select Logic ---
+                    } else if (isSpeedSelect) { 
                         const speedOptions = getSpeedOptions();
                         
                         let selectOptionsHTML = `<option value="">-- Select Speed --</option>`;
@@ -955,6 +1018,30 @@
                                 <select data-field="obsParam" data-param="${paramKey}">
                                     ${selectOptionsHTML}
                                 </select>
+                            </div>
+                        `;
+                    } else if (isMachineSelect) { // --- NEW: Machine Select Logic ---
+                        const machineOptions = getMachineOptions();
+                        
+                        let selectOptionsHTML = ``;
+                        machineOptions.forEach(m => {
+                            const selected = (savedValue === m.value) ? 'selected' : '';
+                            selectOptionsHTML += `<option value="${m.value}" ${selected}>${m.label}</option>`;
+                        });
+
+                        obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder}</label>
+                                <select data-field="obsParam" data-param="${paramKey}">
+                                    ${selectOptionsHTML}
+                                </select>
+                            </div>
+                        `;
+                    } else if (isCycleTimeInput) { // --- NEW: Cycle Time Input Logic ---
+                         obsFieldsHTML += `
+                            <div>
+                                <label>${placeholder} (min)</label>
+                                <input data-field="cycleTimeInput" type="text" placeholder="${placeholder} in minutes" value="${savedValue}" />
                             </div>
                         `;
                     } else {
@@ -1110,7 +1197,7 @@
     }
     // END: NEW FUNCTION FOR OPERATION FIELD DISABLING
 
-    // --- getFormData (REVISED: Added shiftTime field to data collection) ---
+    // --- getFormData (REVISED: CycleTime is collected as a separate field on the row object) ---
     function getFormData() {
       const data = {};
       const relevantJobFields = ['customerName', 'orderQty', 'orderQtyUnit','challan','partDesc','coatingSpec','paint','batchNo', 'verifiedBy','approvedBy','notes', 'silverInsp', 'blackInsp', 'baseBatch', 'topBatch'];
@@ -1144,6 +1231,16 @@
         const isCoatingOp = index + 1 >= 5;
         const isCoatingDisabled = isCoatingOp && group.querySelector('input, select')?.disabled;
         
+        const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
+        const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
+        const fromTimeValue = group.querySelector('input[data-field="fromTime"]').value;
+        const toTimeValue = group.querySelector('input[data-field="toTime"]').value;
+        const inspectionStatus = group.querySelector('select[data-field="inspectionStatus"]').value;
+        const supervisorSign = group.querySelector('select[data-field="supervisorSign"]').value;
+        
+        let cycleTimeValue = ''; // NEW: Separate variable for cycle time
+
+        
         if (opParams && opParams.labels && !isCoatingDisabled) { // Only collect data if not disabled
             opParams.labels.forEach((label) => {
                 if (label !== "N/A" && label.trim().length > 0) {
@@ -1155,7 +1252,7 @@
                     else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
                     else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                     else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
-                    else if (label.includes('Speed')) paramKey = 'Speed'; // Catches both "Speed" and "Speed (Select)"
+                    else if (label.includes('Speed')) paramKey = 'Speed'; 
                     else if (label.includes('Pointage')) paramKey = 'Pointage';
                     else if (label.includes('Thickness')) paramKey = 'Thickness';
                     else if (label.includes('Adhesion')) paramKey = 'Adhesion';
@@ -1163,8 +1260,19 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation') && !label.includes('Qty')) paramKey = 'Observation';
+                    // 🚨 NEW: Machine No.
+                    else if (label.includes('Machine No.')) paramKey = 'MachineNo';
+                    // 🚨 NEW: Cycle Time
+                    else if (label.includes('Cycle Time')) paramKey = 'CycleTime';
+
 
                     if (!paramKey) return; 
+                    
+                    if (paramKey === 'CycleTime') {
+                         const element = group.querySelector(`[data-field="cycleTimeInput"]`);
+                         cycleTimeValue = element?.value.trim() || '';
+                         return; // Do not push CycleTime to observationValues
+                    }
 
                     const element = group.querySelector(`[data-field="obsParam"][data-param="${paramKey}"]`);
                     // Skip if PreHeatingTemp field doesn't exist (e.g. Aquazinc)
@@ -1177,13 +1285,6 @@
 
         let observation = isCoatingDisabled ? '' : observationValues.join('; ').trim();
         
-        const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
-        const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
-        const fromTimeValue = group.querySelector('input[data-field="fromTime"]').value;
-        const toTimeValue = group.querySelector('input[data-field="toTime"]').value;
-        const inspectionStatus = group.querySelector('select[data-field="inspectionStatus"]').value;
-        const supervisorSign = group.querySelector('select[data-field="supervisorSign"]').value;
-
         // Skip spare if empty AND isCoatingDisabled check is false (i.e., pre-ops only)
         if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '' && shiftTimeValue === '') return;
         
@@ -1201,13 +1302,14 @@
                 operatorChecked: '', 
                 supervisorSign: 'N/A', 
                 operation: operation, 
+                cycleTime: '' // NEW: Blank cycle time
             });
         } else {
              rows.push({
               sr: index + 1,
               dateShift: dateShiftValue,
               shiftTime: shiftTimeValue, // Now uses select value
-              observation: observation, 
+              observation: observation, // No longer contains Cycle Time
               fromTime: fromTimeValue,
               toTime: toTimeValue,
               qty: '', 
@@ -1215,6 +1317,7 @@
               operatorChecked: '', 
               supervisorSign: supervisorSign, 
               operation: operation, 
+              cycleTime: cycleTimeValue // NEW: Store Cycle Time separately
             });
         }
       });
@@ -1527,7 +1630,7 @@
 
 
     // ------------------------------------------------------------------
-    // --- applyPreview (REVISED: Updated logic for Speed display) ---
+    // --- applyPreview (REVISED: Updated logic for MachineNo and CycleTime display) ---
     // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
@@ -1582,6 +1685,9 @@
             const structure = PARAMETERS[r.operation]; 
             let singleObservationString = '';
             
+            // 🚨 NEW: Cycle Time is now a separate field on 'r'
+            const cycleTime = r.cycleTime || ''; 
+
             if(structure && structure.labels) {
                 // Map the observation values to parameter keys for easy access
                 let obsMap = {};
@@ -1604,8 +1710,14 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation')) paramKey = 'Observation';
+                    // 🚨 NEW: Machine No.
+                    else if (label.includes('Machine No.')) paramKey = 'MachineNo';
+                    // 🚨 NEW: Cycle Time - Skip as it's separate
+                    else if (label.includes('Cycle Time')) continue; 
 
-                    if (paramKey) {
+
+                    // 🚨 MODIFIED: Use the original `values` array for mapping
+                    if (paramKey && values[valIndex] !== undefined) {
                         obsMap[paramKey] = values[valIndex] || '';
                         valIndex++;
                     }
@@ -1616,7 +1728,6 @@
 
                 if (r.operation === "Incoming Inspection") {
                     if(obsMap.Observation) outputParts.push(obsMap.Observation);
-                    // Inward Qty is now in General Info, removed here.
                 } else if (r.operation === "Packing & Dispatch") {
                     if(obsMap.QtyValue) outputParts.push(`Q- ${obsMap.QtyValue} ${obsMap.QtyUnit || ''}`);
                     if(obsMap.Match) outputParts.push(`M- ${obsMap.Match}`);
@@ -1643,6 +1754,14 @@
                     if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
                     if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
                     if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
+                    
+                    // 🚨 NEW: Shot Blasting Fields
+                    if (r.operation === "Shot Blasting") {
+                        if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); // Prepend Machine No.
+                        if(obsMap.Time) outputParts.push(`Time: ${obsMap.Time} min`);
+                        // 🚨 NEW: Append Cycle Time from separate field
+                        if(cycleTime) outputParts.push(`Cycle Time: ${cycleTime} min`); 
+                    }
                 }
                 
                 singleObservationString = outputParts.join(' | ');
@@ -1711,7 +1830,7 @@
     }
     
     // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (REVISED: Updated logic for Speed display) ---
+    // --- generatePdfWithAutoTable (REVISED: Updated logic for MachineNo and CycleTime display) ---
     // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         try {
@@ -1787,6 +1906,9 @@
                 const values = (r.observation || '').split(';').map(v => v.trim()); 
                 const structure = PARAMETERS[r.operation]; 
                 let finalObservation = ''; 
+                
+                // 🚨 NEW: Cycle Time is now a separate field on 'r'
+                const cycleTime = r.cycleTime || ''; 
 
                 if(structure && structure.labels) {
                     // Map the observation values to parameter keys for easy access
@@ -1810,8 +1932,14 @@
                         else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                         else if (label.includes('Match')) paramKey = 'Match';
                         else if (label.includes('Observation')) paramKey = 'Observation';
+                        // 🚨 NEW: Machine No.
+                        else if (label.includes('Machine No.')) paramKey = 'MachineNo';
+                        // 🚨 NEW: Cycle Time - Skip as it's separate
+                        else if (label.includes('Cycle Time')) continue; 
 
-                        if (paramKey) {
+
+                        // 🚨 MODIFIED: Use the original `values` array for mapping
+                        if (paramKey && values[valIndex] !== undefined) {
                             obsMap[paramKey] = values[valIndex] || '';
                             valIndex++;
                         }
@@ -1848,6 +1976,14 @@
                         if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
                         if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
                         if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
+                        
+                        // 🚨 NEW: Shot Blasting Fields
+                        if (r.operation === "Shot Blasting") {
+                            if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); // Prepend Machine No.
+                            if(obsMap.Time) outputParts.push(`Time: ${obsMap.Time} min`);
+                            // 🚨 NEW: Append Cycle Time from separate field
+                            if(cycleTime) outputParts.push(`Cycle Time: ${cycleTime} min`); 
+                        }
                     }
                     
                     finalObservation = outputParts.join(' | ');
