@@ -81,7 +81,7 @@
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
             if (actionType !== 'logout' && (!email || !password)) {
-                alert("कृपया ईमेल और पासवर्ड डालें।");
+                alert("Please enter email and password.");
                 return;
             }
 
@@ -385,7 +385,7 @@
             <div style="flex: 1; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fffbe6; display: flex; flex-direction: column;">
                 <h3 style="margin: 0 0 10px 0; color:#f59e0b;">🏃 Running Jobs (Active)</h3>
                 <div class="search-area" style="margin-bottom: 8px;">
-                    <input id="runningSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Running')" />
+                    <input id="runningSearch" type="text" placeholder="Search by Challan / Part / Customer" oninput="loadReportsList(this.value, 'Running')" />
                     <button onclick="loadReportsList(document.getElementById('runningSearch').value, 'Running')">🔍</button>
                 </div>
                 <div id="runningJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1; border: none; padding: 0;">
@@ -399,7 +399,7 @@
             <div style="flex: 1; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #f0fdf4; display: flex; flex-direction: column;">
                 <h3 style="margin: 0 0 10px 0; color:#059669;">✅ Completed Jobs (History)</h3>
                 <div class="search-area" style="margin-bottom: 8px;">
-                    <input id="completedSearch" type="text" placeholder="Challan / Part / Customer से खोजें" oninput="loadReportsList(this.value, 'Completed')" />
+                    <input id="completedSearch" type="text" placeholder="Search by Challan / Part / Customer" oninput="loadReportsList(this.value, 'Completed')" />
                     <button onclick="loadReportsList(document.getElementById('completedSearch').value, 'Completed')">🔍</button>
                 </div>
                 <div id="completedJobsContainer" class="report-list-container" style="max-height: none; flex-grow: 1; border: none; padding: 0;">
@@ -421,8 +421,8 @@
           <button id="completeReportBtn" class="secondary" style="background:#059669;" disabled>✅ Mark as Completed</button> 
           <button id="deleteReport" class="delete-btn" disabled>🗑️ Delete</button>
         </div>
-        <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report Customer/Part/Challan No से Save होगी।</div>
-        <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ यह डेटा क्लाउड (Firebase) पर सेव होगा।</div>
+        <div class="note" style="color: #f97316; font-weight: bold;">🔑 Report saves using Customer/Part/Challan No.</div>
+        <div class="note" style="color: #dc2626; font-weight: bold;">⚠️ This data will be saved to the Cloud (Firebase).</div>
       </div>
       
       <h2 style="margin-top:20px;">General Information</h2>
@@ -475,7 +475,7 @@
       
       <h2 style="margin-top:20px;">Operation Details (Input Fields)</h2>
       <div class="rows-input"><div id="rowsInput"></div></div>
-      <div class="note">हर ऑपरेशन के नीचे **Observation** फील्ड्स में अलग-अलग वैल्यू भरें।</div>
+      <div class="note">Fill different values in the **Observation** fields under each operation.</div>
       <h2 style="margin-top:20px;">Signatures & Notes</h2>
       
       <label>Verified By
@@ -812,21 +812,6 @@
         approvedBySelect.innerHTML = generateOptions(VERIFIED_APPROVED_BY, approvedBySelect.value);
     }
 
-    // 🚨 NEW/MODIFIED: Cycle Time Calculation Helper (Not used anymore as we have an input field)
-    /*
-    function calculateCycleTime(fromTime, toTime) {
-        if (!fromTime || !toTime) return '';
-
-        try {
-            // ... (Removed the automatic cycle time calculation)
-        } catch (e) {
-            console.warn("Cycle Time Calculation Error:", e);
-            return '';
-        }
-    }
-    */
-
-
     // --- updateRowInputs (Generates form inputs including select for Temp, Qty Unit, Shift, TIME, Speed, and now Machine No.) ---
     function updateRowInputs(savedRows = []) {
         
@@ -1122,6 +1107,33 @@
                 inp.addEventListener('input', applyPreview); 
             });
             
+            // 🚨 NEW CODE FOR COATING LOCK: Add event listeners to coating operations (Sr No 5 and above)
+            if (srCount >= 5) {
+                div.addEventListener('click', (e) => {
+                    // Prevent default behavior if the click is directly on the group, not just an input/select
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+                        if (!handleCoatingLock(srCount, div)) {
+                            e.preventDefault(); 
+                            e.stopPropagation();
+                        }
+                    }
+                });
+                
+                // Add focus listener for all inner elements to trigger the lock check
+                div.querySelectorAll('input, select, button').forEach(el => {
+                    el.addEventListener('focus', (e) => {
+                         if (!handleCoatingLock(srCount, div)) {
+                            e.preventDefault();
+                            // If focus is prevented, try to redirect focus to the batch input later
+                            setTimeout(() => {
+                                handleCoatingLock(srCount, div); // Will redirect focus
+                            }, 0);
+                        }
+                    });
+                });
+            }
+            // 🚨 END NEW CODE
+            
             rowsInputContainer.appendChild(div);
         });
         
@@ -1176,7 +1188,10 @@
             // Note: Coating steps can vary (Silver=3, Black=4), but all start at 5
             if (srCount >= 5) { 
                 group.querySelectorAll('input, select').forEach(input => {
-                    input.disabled = shouldDisableCoatingOps;
+                    // Only disable if the operation is currently enabled (i.e., user is logged in)
+                    if (isUserLoggedIn) {
+                         input.disabled = shouldDisableCoatingOps;
+                    }
                     
                     // Clear the fields if they are disabled to prevent filling data accidentally
                     if (shouldDisableCoatingOps) {
@@ -1196,6 +1211,39 @@
         applyPreview();
     }
     // END: NEW FUNCTION FOR OPERATION FIELD DISABLING
+
+    // START: NEW FUNCTION FOR BATCH NO. POPUP/LOCK
+    function handleCoatingLock(srCount, operationDiv) {
+        // This is only triggered for Sr No 5 and above
+        if (srCount < 5) return true; 
+
+        const isUserLoggedIn = window.auth.currentUser !== null;
+        if (!isUserLoggedIn) return true; 
+        
+        const baseBatchInput = document.getElementById('baseBatch');
+        const topBatchInput = document.getElementById('topBatch');
+        
+        const baseBatchFilled = baseBatchInput.value.trim().length > 0;
+        const topBatchFilled = topBatchInput.value.trim().length > 0;
+
+        // If both batch numbers are filled, the operation is NOT locked
+        if (baseBatchFilled && topBatchFilled) {
+            return true;
+        }
+
+        // If locked, show the pop-up in English
+        alert("⚠️ Please fill in both BASE COAT BATCH NO. and TOP COAT BATCH NO. to proceed with coating operations.");
+        
+        // Focus back on the empty batch number field
+        if (!baseBatchFilled) {
+            baseBatchInput.focus();
+        } else if (!topBatchFilled) {
+            topBatchInput.focus();
+        } 
+        
+        return false; // Indicates the operation is locked/prevented
+    }
+    // END: NEW FUNCTION FOR BATCH NO. POPUP/LOCK
 
     // --- getFormData (REVISED: CycleTime is collected as a separate field on the row object) ---
     function getFormData() {
@@ -1403,14 +1451,14 @@
 
     async function handleSaveReport() {
         if (!window.auth.currentUser) {
-            alert("❌ कृपया रिपोर्ट सेव करने के लिए साइन इन करें।");
+            alert("❌ Please sign in to save the report.");
             return;
         }
         
         const data = getFormData();
         
         if (!data.challan || !data.customerName) {
-            alert("❌ चालान नंबर और ग्राहक का नाम आवश्यक है।");
+            alert("❌ Challan Number and Customer Name are required.");
             return;
         }
 
@@ -1422,36 +1470,36 @@
             
             setFormData(data); 
             
-            alert(`✅ रिपोर्ट सफलतापूर्वक क्लाउड पर सेव/अपडेट हो गई है। ID: ${currentActiveReportId}`);
+            alert(`✅ Report successfully saved/updated to the cloud. ID: ${currentActiveReportId}`);
             
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             
         } catch (e) {
             console.error(e);
-            alert(`❌ रिपोर्ट सेव करने में त्रुटि: ${e.message}`);
+            alert(`❌ Error saving report: ${e.message}`);
         }
     }
 
     async function handleDeleteReport() {
         if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
-            alert("❌ यह एक नई रिपोर्ट है, इसे डिलीट नहीं किया जा सकता।");
+            alert("❌ This is a new report, it cannot be deleted.");
             return;
         }
         
-        if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को डिलीट करना चाहते हैं?`)) {
+        if (!confirm(`Are you sure you want to delete report ID ${currentActiveReportId}?`)) {
             return;
         }
         
         try {
             await window.cloudDeleteReport(currentActiveReportId);
-            alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक डिलीट हो गई है।`);
+            alert(`✅ Report ID ${currentActiveReportId} successfully deleted.`);
             clearForm();
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed');
         } catch (e) {
             console.error(e);
-            alert(`❌ रिपोर्ट डिलीट करने में त्रुटि: ${e.message}`);
+            alert(`❌ Error deleting report: ${e.message}`);
         }
     }
     
@@ -1466,12 +1514,12 @@
             container.innerHTML = '';
             
             if (reports.length === 0) {
-                 container.innerHTML = '<div style="padding:10px; text-align:center; color:#666;">कोई रिपोर्ट नहीं मिली।</div>';
+                 container.innerHTML = '<div style="padding:10px; text-align:center; color:#666;">No reports found.</div>';
                  return;
             }
             
             const groupedReports = {}; 
-            const monthNames = ["जनवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितम्बर", "अक्टूबर", "नवम्बर", "दिसम्बर"];
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             
             reports.forEach(report => {
                 const date = new Date(report.updatedAt || report.timestamp);
@@ -1561,7 +1609,7 @@
             console.error(`Error loading ${statusFilter} reports:`, e);
             const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
             const container = document.getElementById(containerId);
-            if(container) container.innerHTML = `<div style="padding:10px; text-align:center; color:red;">रिपोर्ट्स लोड करने में त्रुटि: ${e.message}</div>`;
+            if(container) container.innerHTML = `<div style="padding:10px; text-align:center; color:red;">Error loading reports: ${e.message}</div>`;
         }
     };
 
@@ -1592,12 +1640,12 @@
     
     async function handleCompleteReport() {
         if (!currentActiveReportId || currentActiveReportId.startsWith('NEW')) {
-            alert("❌ कृपया किसी रिपोर्ट को लोड/सेव करें जिसे आप Completed मार्क करना चाहते हैं।");
+            alert("❌ Please load/save a report you want to mark as Completed.");
             return;
         }
         
         if (document.getElementById('statusField').value === 'Completed') {
-            alert("❌ यह जॉब पहले से ही Completed मार्क है।");
+            alert("❌ This job is already marked as Completed.");
             return;
         }
         
@@ -1605,7 +1653,7 @@
             const dataToComplete = getFormData();
             await window.cloudSaveReport(dataToComplete, dataToComplete.uniqueId);
             
-            if (!confirm(`क्या आप वाकई रिपोर्ट ID ${currentActiveReportId} को 'Completed' मार्क करना चाहते हैं? (यह 'Completed Jobs' फोल्डर में चली जाएगी)`)) {
+            if (!confirm(`Are you sure you want to mark report ID ${currentActiveReportId} as 'Completed'? (It will move to the 'Completed Jobs' folder)`)) {
                 return;
             }
             
@@ -1616,7 +1664,7 @@
             document.getElementById('statusField').value = 'Completed';
             document.getElementById('completeReportBtn').textContent = '✅ Job is Completed';
             
-            alert(`✅ रिपोर्ट ID ${currentActiveReportId} सफलतापूर्वक 'Completed' मार्क हो गई है।`);
+            alert(`✅ Report ID ${currentActiveReportId} successfully marked as 'Completed'.`);
             
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
@@ -1624,7 +1672,7 @@
             
         } catch (e) {
             console.error(e);
-            alert(`❌ रिपोर्ट को 'Completed' मार्क करने या सेव करने में त्रुटि: ${e.message}`);
+            alert(`❌ Error marking report as 'Completed' or saving it: ${e.message}`);
         }
     }
 
@@ -2094,7 +2142,7 @@
             
         } catch (error) {
             console.error("PDF Generation Error:", error);
-            alert(`❌ PDF बनाने में त्रुटि: ${error.message}. कृपया ब्राउज़र के कंसोल (Console) में देखें.`);
+            alert(`❌ PDF Generation Error: ${error.message}. Please check the browser console.`);
         }
     }
     
@@ -2153,4 +2201,4 @@
     });
   </script>
 </body>
-</html
+</html>
