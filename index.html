@@ -273,7 +273,7 @@
     } 
     .report-search-section { border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; }
     .search-area { display: flex; gap: 8px; margin-bottom: 8px; }
-    .report-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4ims: center; flex-wrap: wrap; }
+    .report-list-container { max-height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4ims: center; flex-wrap: wrap; }
     
     .inspection-codes-grid {
         display: grid;
@@ -298,7 +298,7 @@
     .customer-header { background: #f0f0f0; padding: 8px 10px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
     .month-header { background: #fafafa; padding: 6px 15px; cursor: pointer; font-weight: 500; font-size: 13px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; }
     .folder-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-    .folder-content.expanded { max-height: 1000px; /* Large value to allow expansion */ transition: max-height 0.5s ease-in; }
+    .folder-content.expanded { max-height: 5000px; /* Large value to allow expansion */ transition: max-height 0.5s ease-in; }
     .toggle-icon { transition: transform 0.3s; margin-left: 5px; }
     .toggle-icon.expanded { transform: rotate(90deg); }
 
@@ -660,11 +660,12 @@
         "Silver_Base Coat -2 & Curing": "Geopert: Viscosity - 60-90 sec, speed - 5 Hz., Pre-Heating Temp (150°C), Main Heating Temp (360°C)",
         "Silver_Top Coat -1 & Curing": "Aquazinc: Viscosity - 28-38 sec, time - 30 mins., Baking Temp (180°C/200°C)", 
         
-        // --- UPDATED VISCOSITY: Zintek 33-38 sec ---
-        "Black_Base Coat -1 & Curing": "Zintek: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
-        "Black_Base Coat -2 & Curing": "Zintek: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
-        "Black_Top Coat -1 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
-        "Black_Top Coat -2 & Curing": "Techdip: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
+        // --- UPDATED VISCOSITY: Zintek 42-50 sec (Updated) ---
+        "Black_Base Coat -1 & Curing": "Zintek: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
+        "Black_Base Coat -2 & Curing": "Zintek: Viscosity - 42-50 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (280°C)",
+        // --- UPDATED VISCOSITY: Techdip 33-38 sec (Updated) ---
+        "Black_Top Coat -1 & Curing": "Techdip: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
+        "Black_Top Coat -2 & Curing": "Techdip: Viscosity - 33-38 sec, speed - 3.38 Hz., Pre-Heating Temp (220°C), Main Heating Temp (260°C)",
     };
     
     // --- UPDATED: PARAMETERS (Added Machine No. select and Cycle Time input) ---
@@ -1107,38 +1108,13 @@
                 inp.addEventListener('input', applyPreview); 
             });
             
-            // 🚨 NEW CODE FOR COATING LOCK: Add event listeners to coating operations (Sr No 5 and above)
-            if (srCount >= 5) {
-                div.addEventListener('click', (e) => {
-                    // Prevent default behavior if the click is directly on the group, not just an input/select
-                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
-                        if (!handleCoatingLock(srCount, div)) {
-                            e.preventDefault(); 
-                            e.stopPropagation();
-                        }
-                    }
-                });
-                
-                // Add focus listener for all inner elements to trigger the lock check
-                div.querySelectorAll('input, select, button').forEach(el => {
-                    el.addEventListener('focus', (e) => {
-                         if (!handleCoatingLock(srCount, div)) {
-                            e.preventDefault();
-                            // If focus is prevented, try to redirect focus to the batch input later
-                            setTimeout(() => {
-                                handleCoatingLock(srCount, div); // Will redirect focus
-                            }, 0);
-                        }
-                    });
-                });
-            }
-            // 🚨 END NEW CODE
+            // 🚨 MODIFIED: Locking logic removed for rows 5 and above as requested.
             
             rowsInputContainer.appendChild(div);
         });
         
         applyPreview(); 
-        handleOperationFieldDisabling(); // **NEW CALL**: Disable/enable fields based on batch numbers
+        handleOperationFieldDisabling(); 
     }
     
     // START: NEW FUNCTION FOR BATCH NUMBER VALIDATION (REQUEST 2 - PART 1)
@@ -1172,78 +1148,30 @@
 
     // START: NEW FUNCTION FOR OPERATION FIELD DISABLING (REQUEST 2 - PART 2)
     function handleOperationFieldDisabling() {
-        const isUserLoggedIn = window.auth.currentUser !== null;
-        if (!isUserLoggedIn) return; // Skip if user is logged out (updateActionButtons handles overall disabling)
-
-        const baseBatchFilled = document.getElementById('baseBatch').value.trim().length > 0;
-        const topBatchFilled = document.getElementById('topBatch').value.trim().length > 0;
-        
-        // Coating operations are enabled ONLY if both Base and Top batches are filled
-        const shouldDisableCoatingOps = !(baseBatchFilled && topBatchFilled);
+        // Logic modified: Coating operations are now ALWAYS UNLOCKED even if batch is empty.
+        const shouldDisableCoatingOps = false; 
 
         document.getElementById('rowsInput').querySelectorAll('.row-group').forEach((group, index) => {
             const srCount = index + 1;
             
-            // Coating operations start from Sr No 5 onwards
-            // Note: Coating steps can vary (Silver=3, Black=4), but all start at 5
             if (srCount >= 5) { 
                 group.querySelectorAll('input, select').forEach(input => {
-                    // Only disable if the operation is currently enabled (i.e., user is logged in)
-                    if (isUserLoggedIn) {
+                    // Always enable based only on login status, ignoring batch fields.
+                    if (window.auth.currentUser) {
                          input.disabled = shouldDisableCoatingOps;
                     }
-                    
-                    // Clear the fields if they are disabled to prevent filling data accidentally
-                    if (shouldDisableCoatingOps) {
-                        if (input.type === 'text' || input.type === 'date' || input.type === 'time') {
-                            input.value = '';
-                        } else if (input.tagName === 'SELECT' && input.dataset.field !== 'inspectionStatus' && input.dataset.field !== 'supervisorSign') {
-                            // Only reset time/shift/temp/speed selects, not OK/NOK or Signature
-                            input.selectedIndex = 0; 
-                        }
-                    }
                 });
-            } else {
-                 // Sr 1 to 4 (Pre-Operations) should remain enabled as long as the user is logged in
-                 // Disabling is handled by updateActionButtons (if !isLoggedIn)
             }
         });
         applyPreview();
     }
     // END: NEW FUNCTION FOR OPERATION FIELD DISABLING
 
-    // START: NEW FUNCTION FOR BATCH NO. POPUP/LOCK
+    // START: POPUP/LOCK REMOVED AS REQUESTED
     function handleCoatingLock(srCount, operationDiv) {
-        // This is only triggered for Sr No 5 and above
-        if (srCount < 5) return true; 
-
-        const isUserLoggedIn = window.auth.currentUser !== null;
-        if (!isUserLoggedIn) return true; 
-        
-        const baseBatchInput = document.getElementById('baseBatch');
-        const topBatchInput = document.getElementById('topBatch');
-        
-        const baseBatchFilled = baseBatchInput.value.trim().length > 0;
-        const topBatchFilled = topBatchInput.value.trim().length > 0;
-
-        // If both batch numbers are filled, the operation is NOT locked
-        if (baseBatchFilled && topBatchFilled) {
-            return true;
-        }
-
-        // If locked, show the pop-up in English
-        alert("⚠️ Please fill in both BASE COAT BATCH NO. and TOP COAT BATCH NO. to proceed with coating operations.");
-        
-        // Focus back on the empty batch number field
-        if (!baseBatchFilled) {
-            baseBatchInput.focus();
-        } else if (!topBatchFilled) {
-            topBatchInput.focus();
-        } 
-        
-        return false; // Indicates the operation is locked/prevented
+        return true; 
     }
-    // END: NEW FUNCTION FOR BATCH NO. POPUP/LOCK
+    // END: POPUP/LOCK REMOVED AS REQUESTED
 
     // --- getFormData (REVISED: CycleTime is collected as a separate field on the row object) ---
     function getFormData() {
@@ -1275,9 +1203,9 @@
         
         let observationValues = [];
         
-        // Skip collecting data if the operation fields are disabled (i.e. if batch numbers are missing)
+        // Modification: isCoatingDisabled logic set to false to allow data collection.
         const isCoatingOp = index + 1 >= 5;
-        const isCoatingDisabled = isCoatingOp && group.querySelector('input, select')?.disabled;
+        const isCoatingDisabled = false; 
         
         const dateShiftValue = group.querySelector('input[data-field="dateShift"]').value.trim();
         const shiftTimeValue = group.querySelector('select[data-field="shiftTime"]').value; 
@@ -1286,10 +1214,10 @@
         const inspectionStatus = group.querySelector('select[data-field="inspectionStatus"]').value;
         const supervisorSign = group.querySelector('select[data-field="supervisorSign"]').value;
         
-        let cycleTimeValue = ''; // NEW: Separate variable for cycle time
+        let cycleTimeValue = ''; 
 
         
-        if (opParams && opParams.labels && !isCoatingDisabled) { // Only collect data if not disabled
+        if (opParams && opParams.labels && !isCoatingDisabled) { 
             opParams.labels.forEach((label) => {
                 if (label !== "N/A" && label.trim().length > 0) {
                     let paramKey = '';
@@ -1308,9 +1236,7 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation') && !label.includes('Qty')) paramKey = 'Observation';
-                    // 🚨 NEW: Machine No.
                     else if (label.includes('Machine No.')) paramKey = 'MachineNo';
-                    // 🚨 NEW: Cycle Time
                     else if (label.includes('Cycle Time')) paramKey = 'CycleTime';
 
 
@@ -1319,11 +1245,10 @@
                     if (paramKey === 'CycleTime') {
                          const element = group.querySelector(`[data-field="cycleTimeInput"]`);
                          cycleTimeValue = element?.value.trim() || '';
-                         return; // Do not push CycleTime to observationValues
+                         return; 
                     }
 
                     const element = group.querySelector(`[data-field="obsParam"][data-param="${paramKey}"]`);
-                    // Skip if PreHeatingTemp field doesn't exist (e.g. Aquazinc)
                     if (paramKey === 'PreHeatingTemp' && !element) return; 
                     
                     observationValues.push(element?.value.trim() || '');
@@ -1332,32 +1257,13 @@
         }
 
         let observation = isCoatingDisabled ? '' : observationValues.join('; ').trim();
-        
-        // Skip spare if empty AND isCoatingDisabled check is false (i.e., pre-ops only)
         if (operation.includes('Spare Operation') && observation.replace(/; /g, '').length === 0 && dateShiftValue === '' && shiftTimeValue === '') return;
         
-        // Ensure coating ops have blank data if disabled, but still include the row to preserve structure
-        if (isCoatingDisabled) {
-             rows.push({
-                sr: index + 1,
-                dateShift: '',
-                shiftTime: '', 
-                observation: '', 
-                fromTime: '',
-                toTime: '',
-                qty: '', 
-                inspectionStatus: 'N/A', 
-                operatorChecked: '', 
-                supervisorSign: 'N/A', 
-                operation: operation, 
-                cycleTime: '' // NEW: Blank cycle time
-            });
-        } else {
              rows.push({
               sr: index + 1,
               dateShift: dateShiftValue,
-              shiftTime: shiftTimeValue, // Now uses select value
-              observation: observation, // No longer contains Cycle Time
+              shiftTime: shiftTimeValue, 
+              observation: observation, 
               fromTime: fromTimeValue,
               toTime: toTimeValue,
               qty: '', 
@@ -1365,12 +1271,10 @@
               operatorChecked: '', 
               supervisorSign: supervisorSign, 
               operation: operation, 
-              cycleTime: cycleTimeValue // NEW: Store Cycle Time separately
+              cycleTime: cycleTimeValue 
             });
-        }
       });
       data.rows = rows;
-      
       return data;
     }
 
@@ -1394,10 +1298,10 @@
         currentActiveReportId = data.uniqueId || null; 
         document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId && !currentActiveReportId.startsWith('NEW') ? currentActiveReportId : '-- New --'}`;
         
-        initSignatureSelectors(); // Re-initialize selectors to ensure correct list
+        initSignatureSelectors(); 
         updateRowInputs(data.rows || []); 
         window.updateActionButtons(data); 
-        handleBatchNoValidation(); // Call validation on setting form data
+        handleBatchNoValidation(); 
     }
 
     function clearForm() {
@@ -1406,30 +1310,26 @@
             if (el && (el.type === 'text' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.type === 'email' || el.type === 'date' || el.type === 'time')) {
                  el.value = ''; 
             } else if (el && el.tagName === 'SELECT') {
-                 // Ensures select fields revert to the first option, which is now N/A or a placeholder
                  el.value = el.options[0]?.value; 
             }
         });
         
-        // Resetting specific default values
         document.getElementById('customerName').value = "Star Engineering";
         document.getElementById('orderQty').value = "1000";
         document.getElementById('orderQtyUnit').value = "Nos";
         document.getElementById('challan').value = "CH/2508/01 | 01.09.2025";
         document.getElementById('batchNo').value = "250819"; 
         
-        // --- UPDATED: Set default sign-off to "N/A" for the VERIFIED_APPROVED_BY list
         initSignatureSelectors();
         document.getElementById('verifiedBy').value = "N/A";
         document.getElementById('approvedBy').value = "N/A";
-        // --- END UPDATED ---
         
         document.getElementById('notes').value = "P- Pointage, V- Viscosity, T- Temp, S-speed, A-Adhesion.";
         document.getElementById('paint').value = 'Black'; 
         document.getElementById('silverInsp').value = 'Silver Paint';
         document.getElementById('blackInsp').value = 'Black Paint';
-        document.getElementById('baseBatch').value = ''; // BLANKED as per request
-        document.getElementById('topBatch').value = ''; // BLANKED as per request
+        document.getElementById('baseBatch').value = ''; 
+        document.getElementById('topBatch').value = ''; 
 
         const statusEl = document.getElementById('statusField');
         if (statusEl) statusEl.value = 'Running';
@@ -1444,37 +1344,27 @@
         updateRowInputs(); 
         applyPreview();
         window.updateActionButtons(null); 
-        handleBatchNoValidation(); // Call validation after clearing the form
+        handleBatchNoValidation(); 
     }
     
-    // --- CLOUD LOGIC FUNCTIONS (UNCHANGED) ---
-
     async function handleSaveReport() {
         if (!window.auth.currentUser) {
             alert("❌ Please sign in to save the report.");
             return;
         }
-        
         const data = getFormData();
-        
         if (!data.challan || !data.customerName) {
             alert("❌ Challan Number and Customer Name are required.");
             return;
         }
-
         try {
             await window.cloudSaveReport(data, data.uniqueId);
-            
             currentActiveReportId = data.uniqueId;
             document.getElementById('currentReportId').textContent = `Active ID: ${currentActiveReportId}`;
-            
             setFormData(data); 
-            
             alert(`✅ Report successfully saved/updated to the cloud. ID: ${currentActiveReportId}`);
-            
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
-            
         } catch (e) {
             console.error(e);
             alert(`❌ Error saving report: ${e.message}`);
@@ -1486,11 +1376,9 @@
             alert("❌ This is a new report, it cannot be deleted.");
             return;
         }
-        
         if (!confirm(`Are you sure you want to delete report ID ${currentActiveReportId}?`)) {
             return;
         }
-        
         try {
             await window.cloudDeleteReport(currentActiveReportId);
             alert(`✅ Report ID ${currentActiveReportId} successfully deleted.`);
@@ -1503,21 +1391,16 @@
         }
     }
     
-    // --- loadReportsList (Initial state is collapsed) ---
     window.loadReportsList = async (query = '', statusFilter = 'Running') => {
         try {
             const reports = await window.cloudLoadReports(query, statusFilter);
-            
             const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
             const container = document.getElementById(containerId);
-            
             container.innerHTML = '';
-            
             if (reports.length === 0) {
                  container.innerHTML = '<div style="padding:10px; text-align:center; color:#666;">No reports found.</div>';
                  return;
             }
-            
             const groupedReports = {}; 
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             
@@ -1525,112 +1408,77 @@
                 const date = new Date(report.updatedAt || report.timestamp);
                 const monthYearKey = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
                 const customerKey = report.customerName.trim() || 'No Customer Name';
-                
-                if (!groupedReports[customerKey]) {
-                    groupedReports[customerKey] = {};
-                }
-                if (!groupedReports[customerKey][monthYearKey]) {
-                    groupedReports[customerKey][monthYearKey] = [];
-                }
+                if (!groupedReports[customerKey]) { groupedReports[customerKey] = {}; }
+                if (!groupedReports[customerKey][monthYearKey]) { groupedReports[customerKey][monthYearKey] = []; }
                 groupedReports[customerKey][monthYearKey].push(report);
             });
             
             for (const customerName in groupedReports) {
                 const customerGroupDiv = document.createElement('div');
                 customerGroupDiv.className = 'customer-group';
-                
                 const customerHeader = document.createElement('div');
                 customerHeader.className = 'customer-header';
-                
                 let totalJobs = 0;
-                for(const month in groupedReports[customerName]) {
-                    totalJobs += groupedReports[customerName][month].length;
-                }
-                
+                for(const month in groupedReports[customerName]) { totalJobs += groupedReports[customerName][month].length; }
                 customerHeader.innerHTML = `${customerName} <span style="font-size: 11px; margin-left: 10px; font-weight: normal; color: #4b5563;">(${totalJobs} Jobs Total)</span> <span class="toggle-icon">▶</span>`;
                 customerGroupDiv.appendChild(customerHeader);
-
                 const customerContent = document.createElement('div');
                 customerContent.className = 'folder-content'; 
                 customerGroupDiv.appendChild(customerContent);
-                
                 customerHeader.addEventListener('click', () => {
                     customerContent.classList.toggle('expanded');
                     customerHeader.querySelector('.toggle-icon').classList.toggle('expanded');
                 });
-                
                 const sortedMonths = Object.keys(groupedReports[customerName]).sort((a, b) => {
                      const dateA = new Date(a.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
                      const dateB = new Date(b.replace(/(\w+)\s(\d+)/, '$1 1, $2'));
                      return dateB - dateA; 
                 });
-
-
                 for (const monthYearKey of sortedMonths) {
                     const monthGroupDiv = document.createElement('div');
                     monthGroupDiv.className = 'month-group';
-                    
                     const monthHeader = document.createElement('div');
                     monthHeader.className = 'month-header';
                     monthHeader.innerHTML = `${monthYearKey} (${groupedReports[customerName][monthYearKey].length} Jobs) <span class="toggle-icon">▶</span>`;
                     customerContent.appendChild(monthHeader);
-                    
                     const monthContent = document.createElement('div');
                     monthContent.className = 'folder-content'; 
                     customerContent.appendChild(monthContent);
-                    
                     monthHeader.addEventListener('click', (e) => {
                         e.stopPropagation(); 
                         monthContent.classList.toggle('expanded');
                         monthHeader.querySelector('.toggle-icon').classList.toggle('expanded');
                     });
-                    
                     groupedReports[customerName][monthYearKey].forEach(report => {
                         const item = document.createElement('div');
                         item.className = 'report-list-item';
-                        if (report.uniqueId === currentActiveReportId) {
-                             item.classList.add('selected');
-                        }
+                        if (report.uniqueId === currentActiveReportId) { item.classList.add('selected'); }
                         item.dataset.id = report.uniqueId;
-                        item.innerHTML = `
-                            <span>${report.partDesc} <span style="font-weight: normal; color:#6b7280; margin-left: 8px;">(Batch: ${report.batchNo})</span></span>
-                            <span style="font-size:10px; color:#666;">${report.challan}</span>
-                        `;
-                        item.addEventListener('click', () => {
-                            handleLoadReport(report);
-                            showView('form'); 
-                        });
+                        item.innerHTML = `<span>${report.partDesc} <span style="font-weight: normal; color:#6b7280; margin-left: 8px;">(Batch: ${report.batchNo})</span></span><span style="font-size:10px; color:#666;">${report.challan}</span>`;
+                        item.addEventListener('click', () => { handleLoadReport(report); showView('form'); });
                         monthContent.appendChild(item);
                     });
                 }
                 container.appendChild(customerGroupDiv);
             }
         } catch (e) {
-            console.error(`Error loading ${statusFilter} reports:`, e);
             const containerId = (statusFilter === 'Running') ? 'runningJobsContainer' : 'completedJobsContainer';
             const container = document.getElementById(containerId);
             if(container) container.innerHTML = `<div style="padding:10px; text-align:center; color:red;">Error loading reports: ${e.message}</div>`;
         }
     };
 
-
     function handleLoadReport(reportData) {
         setFormData(reportData);
-        
         document.querySelectorAll('.report-list-item').forEach(item => item.classList.remove('selected'));
-        
         const selectedItem = document.querySelector(`.report-list-item[data-id="${reportData.uniqueId}"]`);
         if (selectedItem) {
             selectedItem.classList.add('selected');
-            
-            // Logic to expand all parent folders on selection
             let currentParent = selectedItem.closest('.folder-content');
             while(currentParent) {
                 currentParent.classList.add('expanded');
                 const header = currentParent.previousElementSibling;
-                if(header && header.querySelector('.toggle-icon')) {
-                    header.querySelector('.toggle-icon').classList.add('expanded');
-                }
+                if(header && header.querySelector('.toggle-icon')) { header.querySelector('.toggle-icon').classList.add('expanded'); }
                 currentParent = currentParent.closest('.folder-content:not(.month-group .folder-content)');
                 if (currentParent && currentParent.classList.contains('customer-group')) break;
                 if (currentParent === selectedItem.closest('.customer-group .folder-content')) currentParent = null; 
@@ -1643,107 +1491,64 @@
             alert("❌ Please load/save a report you want to mark as Completed.");
             return;
         }
-        
         if (document.getElementById('statusField').value === 'Completed') {
             alert("❌ This job is already marked as Completed.");
             return;
         }
-        
         try {
             const dataToComplete = getFormData();
             await window.cloudSaveReport(dataToComplete, dataToComplete.uniqueId);
-            
-            if (!confirm(`Are you sure you want to mark report ID ${currentActiveReportId} as 'Completed'? (It will move to the 'Completed Jobs' folder)`)) {
-                return;
-            }
-            
+            if (!confirm(`Are you sure you want to mark report ID ${currentActiveReportId} as 'Completed'?`)) { return; }
             dataToComplete.status = 'Completed'; 
-            
             await window.cloudSaveReport(dataToComplete, dataToComplete.uniqueId);
-            
             document.getElementById('statusField').value = 'Completed';
             document.getElementById('completeReportBtn').textContent = '✅ Job is Completed';
-            
             alert(`✅ Report ID ${currentActiveReportId} successfully marked as 'Completed'.`);
-            
             window.loadReportsList('', 'Running'); 
             window.loadReportsList('', 'Completed'); 
             window.updateActionButtons(dataToComplete); 
-            
         } catch (e) {
-            console.error(e);
-            alert(`❌ Error marking report as 'Completed' or saving it: ${e.message}`);
+            alert(`❌ Error: ${e.message}`);
         }
     }
 
-
-    // ------------------------------------------------------------------
-    // --- applyPreview (REVISED: Updated logic for MachineNo and CycleTime display) ---
-    // ------------------------------------------------------------------
     function applyPreview() {
         const data = getFormData();
         const v = (id) => document.getElementById(id)?.value || '';
         const paintType = v('paint'); 
-        
         document.getElementById('pvCustomer').textContent = v('customerName');
-        
-        // REVISED: Display Order Qty and Unit
         document.getElementById('pvQty').textContent = `${v('orderQty')} ${v('orderQtyUnit')}`;
-        
         document.getElementById('pvChallan').textContent = v('challan');
         document.getElementById('pvPart').textContent = v('partDesc');
         document.getElementById('pvBatchNo').textContent = v('batchNo');
-        
         document.getElementById('pvCoating').textContent = v('coatingSpec');
-        
         const pvInspHeader = document.getElementById('pvInspHeader');
         const pvInspValue = document.getElementById('pvInspValue');
         pvInspHeader.textContent = 'Paint'; 
-        
-        if (paintType === 'Black') {
-            pvInspValue.textContent = v('blackInsp'); 
-        } else if (paintType === 'Silver') {
-            pvInspValue.textContent = v('silverInsp'); 
-        } else {
-            pvInspValue.textContent = 'N/A';
-        }
-        
+        if (paintType === 'Black') { pvInspValue.textContent = v('blackInsp'); } 
+        else if (paintType === 'Silver') { pvInspValue.textContent = v('silverInsp'); } 
+        else { pvInspValue.textContent = 'N/A'; }
         document.getElementById('pvBaseBatch').textContent = v('baseBatch'); 
         document.getElementById('pvTopBatch').textContent = v('topBatch'); 
-        
         document.getElementById('pvVerified').textContent = v('verifiedBy');
         document.getElementById('pvApproved').textContent = v('approvedBy');
         document.getElementById('pvNotes').innerHTML = v('notes'); 
-
         const tbody = document.getElementById('pvRows');
         tbody.innerHTML = '';
-        
         const allRows = data.rows;
         let globalSr = 1; 
-        
-        // --- MODIFIED LOGIC: Set requiredLength based on paintType ---
-        // Silver needs 9 operations (4 pre + 3 coating + 2 post)
-        // Black needs 10 operations (4 pre + 4 coating + 2 post)
         const requiredLength = (paintType === 'Silver') ? 9 : 10; 
-        // -------------------------------------------------------------
-
         allRows.forEach(r => {
-            
             const values = (r.observation || '').split(';').map(v => v.trim()); 
             const structure = PARAMETERS[r.operation]; 
             let singleObservationString = '';
-            
-            // 🚨 NEW: Cycle Time is now a separate field on 'r'
             const cycleTime = r.cycleTime || ''; 
-
             if(structure && structure.labels) {
-                // Map the observation values to parameter keys for easy access
                 let obsMap = {};
                 let valIndex = 0;
                  for (let j = 0; j < structure.labels.length; j++) {
                     const label = structure.labels[j];
                     let paramKey = '';
-                    
                     if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
                     else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
                     else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
@@ -1758,218 +1563,104 @@
                     else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                     else if (label.includes('Match')) paramKey = 'Match';
                     else if (label.includes('Observation')) paramKey = 'Observation';
-                    // 🚨 NEW: Machine No.
                     else if (label.includes('Machine No.')) paramKey = 'MachineNo';
-                    // 🚨 NEW: Cycle Time - Skip as it's separate
                     else if (label.includes('Cycle Time')) continue; 
-
-
-                    // 🚨 MODIFIED: Use the original `values` array for mapping
                     if (paramKey && values[valIndex] !== undefined) {
                         obsMap[paramKey] = values[valIndex] || '';
                         valIndex++;
                     }
                 }
-                
-                // Construct the string based on parameter types
                 let outputParts = [];
-
-                if (r.operation === "Incoming Inspection") {
-                    if(obsMap.Observation) outputParts.push(obsMap.Observation);
-                } else if (r.operation === "Packing & Dispatch") {
+                if (r.operation === "Incoming Inspection") { if(obsMap.Observation) outputParts.push(obsMap.Observation); } 
+                else if (r.operation === "Packing & Dispatch") {
                     if(obsMap.QtyValue) outputParts.push(`Q- ${obsMap.QtyValue} ${obsMap.QtyUnit || ''}`);
                     if(obsMap.Match) outputParts.push(`M- ${obsMap.Match}`);
                 } else {
-                    // Standard operations
                     if (obsMap.Observation) outputParts.push(`Obs: ${obsMap.Observation}`);
                     if (obsMap.Pointage) outputParts.push(`P-${obsMap.Pointage} gms/l`);
                     if (obsMap.Thickness) outputParts.push(`T-${obsMap.Thickness} microns`);
                     if (obsMap.Adhesion) outputParts.push(`A-${obsMap.Adhesion}`);
-                    
-                    // Coating parameters
                     if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
-                    
-                    // MODIFIED: Speed logic
-                    if (obsMap.Speed) {
-                         const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz';
-                         outputParts.push(`S-${obsMap.Speed}${unit}`);
-                    }
-                    
+                    if (obsMap.Speed) { const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz'; outputParts.push(`S-${obsMap.Speed}${unit}`); }
                     if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
-                    
-                    // Temp parameters (only display the value)
                     if (obsMap.PreHeatingTemp) outputParts.push(`PHT-${obsMap.PreHeatingTemp}`);
                     if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
                     if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
                     if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
-                    
-                    // 🚨 NEW: Shot Blasting Fields
                     if (r.operation === "Shot Blasting") {
-                        if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); // Prepend Machine No.
+                        if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); 
                         if(obsMap.Time) outputParts.push(`Time: ${obsMap.Time} min`);
-                        // 🚨 NEW: Append Cycle Time from separate field
                         if(cycleTime) outputParts.push(`Cycle Time: ${cycleTime} min`); 
                     }
                 }
-                
                 singleObservationString = outputParts.join(' | ');
-
-            } else {
-                 singleObservationString = r.observation;
-            }
-           
+            } else { singleObservationString = r.observation; }
             const specKey = r.operation.includes('Coat') ? `${paintType}_${r.operation}` : (r.operation === 'Final Inspection' ? `${r.operation}_${paintType}` : r.operation);
             const specification = SPECIFICATIONS[specKey] || r.operation;
-            
             const tr = document.createElement('tr');
             const finalObservation = singleObservationString.trim();
-            
-            // Format Date (YYYY-MM-DD to DD/MM/YYYY)
             let displayDate = r.dateShift || '';
-            if (displayDate.includes('-') && displayDate.length === 10) {
-                 const [y, m, d] = displayDate.split('-');
-                 displayDate = `${d}/${m}/${y}`;
-            } 
-            // Append shift time if available
-            if (r.shiftTime) {
-                 displayDate += r.dateShift ? ` / ${r.shiftTime}` : r.shiftTime; 
-            }
-            
-            // Time values are already HH:MM format from type="time"
+            if (displayDate.includes('-') && displayDate.length === 10) { const [y, m, d] = displayDate.split('-'); displayDate = `${d}/${m}/${y}`; } 
+            if (r.shiftTime) { displayDate += r.dateShift ? ` / ${r.shiftTime}` : r.shiftTime; }
             const displayFromTime = r.fromTime || '';
             const displayToTime = r.toTime || '';
-
-            const rowContent = `
-                <td style="text-align:center">${globalSr}</td>
-                <td>${displayDate || ''}</td>
-                <td>${r.operation || ''}</td>
-                <td>${specification || ''}</td> 
-                <td style="font-size: 9px; line-height: 1.2;">${finalObservation}</td>
-                <td style="text-align:center">${displayFromTime}</td>
-                <td style="text-align:center">${displayToTime}</td>
-                <td style="text-align:center; font-weight: bold;">${r.inspectionStatus || ''}</td> 
-                <td>${r.supervisorSign || ''}</td> `; 
-
-            tr.innerHTML = rowContent;
+            tr.innerHTML = `<td style="text-align:center">${globalSr}</td><td>${displayDate || ''}</td><td>${r.operation || ''}</td><td>${specification || ''}</td><td style="font-size: 9px; line-height: 1.2;">${finalObservation}</td><td style="text-align:center">${displayFromTime}</td><td style="text-align:center">${displayToTime}</td><td style="text-align:center; font-weight: bold;">${r.inspectionStatus || ''}</td><td>${r.supervisorSign || ''}</td>`; 
             tbody.appendChild(tr);
-            
             const rowHeight = (globalSr === 1) ? '5mm' : '18mm';
             tr.style.height = rowHeight; 
             tr.querySelectorAll('td').forEach(td => td.style.height = rowHeight);
-            
             globalSr++;
         });
-        
-        let currentOutputRows = tbody.querySelectorAll('tr').length;
-        
-        // Fill remaining rows with empty rows up to requiredLength (9 for Silver, 10 for Black)
-        if (currentOutputRows < requiredLength) {
-            for (let i = 0; i < requiredLength - currentOutputRows; i++) {
+        if (tbody.querySelectorAll('tr').length < requiredLength) {
+            for (let i = 0; i < requiredLength - tbody.querySelectorAll('tr').length; i++) {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td style="text-align:center">${globalSr + i}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`; 
                 tbody.appendChild(tr);
-                
-                const blankSr = globalSr + i;
-                const rowHeight = (blankSr === 1) ? '5mm' : '18mm';
-                tr.style.height = rowHeight; 
-                tr.querySelectorAll('td').forEach(td => td.style.height = rowHeight);
+                const rowHeight = ((globalSr + i) === 1) ? '5mm' : '18mm';
+                tr.style.height = rowHeight; tr.querySelectorAll('td').forEach(td => td.style.height = rowHeight);
             }
         }
     }
     
-    // ------------------------------------------------------------------
-    // --- generatePdfWithAutoTable (REVISED: Updated logic for MachineNo and CycleTime display) ---
-    // ------------------------------------------------------------------
     async function generatePdfWithAutoTable() {
         try {
             const data = getFormData();
             const v = (id) => document.getElementById(id)?.value || '';
             const paintType = v('paint'); 
-            
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pageHeight = pdf.internal.pageSize.getHeight(); 
             const bottomMargin = 10;
             const availablePageEnd = pageHeight - bottomMargin; 
             let yOffset = 15; 
-
-            // --- Header and Format No. ---
-            pdf.setFontSize(14);
-            pdf.text("JOB CARD / ROUTE CARD", 105, yOffset, null, null, "center");
+            pdf.setFontSize(14); pdf.text("JOB CARD / ROUTE CARD", 105, yOffset, null, null, "center");
             yOffset += 7;
-
-            pdf.setFontSize(6.5); 
-            pdf.text(`Format No: WT/PDR/11  |  REV. NO: 01  |  REV. DATE: 01.09.2025`, 105, yOffset, null, null, "center");
+            pdf.setFontSize(6.5); pdf.text(`Format No: WT/PDR/11  |  REV. NO: 01  |  REV. DATE: 01.09.2025`, 105, yOffset, null, null, "center");
             yOffset += 5;
-            
-            // --- General Info Table ---
-            const generalInfo = [
-                ["Customer Name", v('customerName'), "Order/Challan Qty", `${v('orderQty')} ${v('orderQtyUnit')}`],
-                ["Customer Challan No/Date", v('challan'), "Batch No.", v('batchNo')],
-                ["Part Desc/No", v('partDesc'), "Coating Spec", v('coatingSpec')]
-            ];
-
-            pdf.autoTable({
-                startY: yOffset,
-                head: [],
-                body: generalInfo,
-                theme: 'grid',
-                styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2 },
-                columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' }, 2: { cellWidth: 30, fontStyle: 'bold' } },
-                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-            });
-
-            // --- Coating Batch Table ---
-            const coatingInfo = [
-                [v('coatingSpec'), paintType === 'Black' ? v('blackInsp') : v('silverInsp'), v('baseBatch'), v('topBatch')]
-            ];
-            
-            pdf.autoTable({
-                startY: yOffset,
-                head: [['COATING SPECIFICATION', 'Paint', 'BASE COAT BATCH NO.', 'TOP COAT BATCH NO.']],
-                body: coatingInfo,
-                theme: 'grid',
-                styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2, halign: 'center' },
-                headStyles: { fillColor: [200, 200, 200], fontStyle: 'bold', fontSize: 6.5 },
-                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-            });
-            
-            // --- Main Operations Table ---
-            
-            const mainHeader = [
-                'Sr No', 'Date/Shift', 'Operation', 'Specifications', 'Observation', 
-                'From Time', 'To Time', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'
-            ];
-            
+            const generalInfo = [["Customer Name", v('customerName'), "Order/Challan Qty", `${v('orderQty')} ${v('orderQtyUnit')}`], ["Customer Challan No/Date", v('challan'), "Batch No.", v('batchNo')], ["Part Desc/No", v('partDesc'), "Coating Spec", v('coatingSpec')]];
+            pdf.autoTable({ startY: yOffset, head: [], body: generalInfo, theme: 'grid', styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2 }, columnStyles: { 0: { cellWidth: 30, fontStyle: 'bold' }, 2: { cellWidth: 30, fontStyle: 'bold' } }, didDrawPage: (data) => { yOffset = data.cursor.y + 3; } });
+            const coatingInfo = [[v('coatingSpec'), paintType === 'Black' ? v('blackInsp') : v('silverInsp'), v('baseBatch'), v('topBatch')]];
+            pdf.autoTable({ startY: yOffset, head: [['COATING SPECIFICATION', 'Paint', 'BASE COAT BATCH NO.', 'TOP COAT BATCH NO.']], body: coatingInfo, theme: 'grid', styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2, halign: 'center' }, headStyles: { fillColor: [200, 200, 200], fontStyle: 'bold', fontSize: 6.5 }, didDrawPage: (data) => { yOffset = data.cursor.y + 3; } });
+            const mainHeader = ['Sr No', 'Date/Shift', 'Operation', 'Specifications', 'Observation', 'From Time', 'To Time', 'Inspection OK/NOK', 'Operator/Supervisor/QA Signature'];
             const mainBody = [];
             const allRows = data.rows;
             let globalSr = 1;
-            
-            // --- MODIFIED LOGIC: Set requiredLength based on paintType for PDF ---
             const requiredLength = (paintType === 'Silver') ? 9 : 10; 
-            // ----------------------------------------------------------------------
-
             allRows.forEach(r => {
-                
                 const values = (r.observation || '').split(';').map(v => v.trim()); 
                 const structure = PARAMETERS[r.operation]; 
                 let finalObservation = ''; 
-                
-                // 🚨 NEW: Cycle Time is now a separate field on 'r'
                 const cycleTime = r.cycleTime || ''; 
-
                 if(structure && structure.labels) {
-                    // Map the observation values to parameter keys for easy access
                     let obsMap = {};
                     let valIndex = 0;
                      for (let j = 0; j < structure.labels.length; j++) {
                         const label = structure.labels[j];
                         let paramKey = '';
-                        
                         if (label.includes('Pre-Heating Temp')) paramKey = 'PreHeatingTemp';
                         else if (label.includes('Main Heating Temp')) paramKey = 'MainHeatingTemp';
                         else if (label.includes('Baking Temp')) paramKey = 'BakingTemp';
-                        else if (label.includes('Temp') && !label.includes('Heating')) paramKey = 'Temp';
+                        else if (label.includes('Temp')) paramKey = 'Temp';
                         else if (label.includes('Viscosity')) paramKey = 'Viscosity';
                         else if (label.includes('Time/Speed')) paramKey = 'TimeSpeed';
                         else if (label.includes('Speed')) paramKey = 'Speed';
@@ -1980,225 +1671,68 @@
                         else if (label.includes('Qty Unit')) paramKey = 'QtyUnit';
                         else if (label.includes('Match')) paramKey = 'Match';
                         else if (label.includes('Observation')) paramKey = 'Observation';
-                        // 🚨 NEW: Machine No.
                         else if (label.includes('Machine No.')) paramKey = 'MachineNo';
-                        // 🚨 NEW: Cycle Time - Skip as it's separate
                         else if (label.includes('Cycle Time')) continue; 
-
-
-                        // 🚨 MODIFIED: Use the original `values` array for mapping
-                        if (paramKey && values[valIndex] !== undefined) {
-                            obsMap[paramKey] = values[valIndex] || '';
-                            valIndex++;
-                        }
+                        if (paramKey && values[valIndex] !== undefined) { obsMap[paramKey] = values[valIndex] || ''; valIndex++; }
                     }
-                    
-                    // Construct the string based on parameter types (PDF version)
                     let outputParts = [];
-
-                    if (r.operation === "Incoming Inspection") {
-                        if(obsMap.Observation) outputParts.push(obsMap.Observation);
-                    } else if (r.operation === "Packing & Dispatch") {
+                    if (r.operation === "Incoming Inspection") { if(obsMap.Observation) outputParts.push(obsMap.Observation); } 
+                    else if (r.operation === "Packing & Dispatch") {
                         if(obsMap.QtyValue) outputParts.push(`Q- ${obsMap.QtyValue} ${obsMap.QtyUnit || ''}`);
                         if(obsMap.Match) outputParts.push(`M- ${obsMap.Match}`);
                     } else {
-                        // Standard operations
                         if (obsMap.Observation) outputParts.push(`Obs: ${obsMap.Observation}`);
                         if (obsMap.Pointage) outputParts.push(`P-${obsMap.Pointage} gms/l`);
                         if (obsMap.Thickness) outputParts.push(`T-${obsMap.Thickness} microns`);
                         if (obsMap.Adhesion) outputParts.push(`A-${obsMap.Adhesion}`);
-                        
-                        // Coating parameters
                         if (obsMap.Viscosity) outputParts.push(`V-${obsMap.Viscosity} sec`);
-                        
-                        // MODIFIED: Speed logic
-                        if (obsMap.Speed) {
-                             const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz';
-                             outputParts.push(`S-${obsMap.Speed}${unit}`);
-                        }
-                        
+                        if (obsMap.Speed) { const unit = obsMap.Speed.includes('box oven') ? '' : ' Hz'; outputParts.push(`S-${obsMap.Speed}${unit}`); }
                         if (obsMap.TimeSpeed) outputParts.push(`T/S-${obsMap.TimeSpeed}`);
-                        
-                        // Temp parameters (only display the value)
                         if (obsMap.PreHeatingTemp) outputParts.push(`PHT-${obsMap.PreHeatingTemp}`);
                         if (obsMap.MainHeatingTemp) outputParts.push(`MHT-${obsMap.MainHeatingTemp}`);
                         if (obsMap.BakingTemp) outputParts.push(`Baking-${obsMap.BakingTemp}`);
                         if (obsMap.Temp) outputParts.push(`T-${obsMap.Temp}`);
-                        
-                        // 🚨 NEW: Shot Blasting Fields
-                        if (r.operation === "Shot Blasting") {
-                            if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); // Prepend Machine No.
-                            if(obsMap.Time) outputParts.push(`Time: ${obsMap.Time} min`);
-                            // 🚨 NEW: Append Cycle Time from separate field
-                            if(cycleTime) outputParts.push(`Cycle Time: ${cycleTime} min`); 
-                        }
+                        if (r.operation === "Shot Blasting") { if(obsMap.MachineNo && obsMap.MachineNo !== 'N/A') outputParts.unshift(`Machine: ${obsMap.MachineNo}`); if(obsMap.Time) outputParts.push(`Time: ${obsMap.Time} min`); if(cycleTime) outputParts.push(`Cycle Time: ${cycleTime} min`); }
                     }
-                    
                     finalObservation = outputParts.join(' | ');
-
-                } else {
-                     finalObservation = r.observation;
-                }
-                
+                } else { finalObservation = r.observation; }
                 const specKey = r.operation.includes('Coat') ? `${paintType}_${r.operation}` : (r.operation === 'Final Inspection' ? `${r.operation}_${paintType}` : r.operation);
                 const specification = SPECIFICATIONS[specKey] || r.operation;
-                
-                // Format Date (YYYY-MM-DD to DD/MM/YYYY) for PDF
                 let displayDate = r.dateShift || '';
-                if (displayDate.includes('-') && displayDate.length === 10) {
-                     const [y, m, d] = displayDate.split('-');
-                     displayDate = `${d}/${m}/${y}`;
-                } 
-                // Append shift time if available
-                if (r.shiftTime) {
-                    displayDate += displayDate ? ` / ${r.shiftTime}` : r.shiftTime;
-                }
-                
-                // Time values are already HH:MM format from type="time"
-                const displayFromTime = r.fromTime || '';
-                const displayToTime = r.toTime || '';
-                
-                
-                mainBody.push([
-                    globalSr,
-                    displayDate.trim() || '',
-                    r.operation || '',
-                    specification || '', 
-                    finalObservation.trim(),
-                    displayFromTime,
-                    displayToTime,
-                    r.inspectionStatus || '', 
-                    r.supervisorSign || '' 
-                ]);
+                if (displayDate.includes('-') && displayDate.length === 10) { const [y, m, d] = displayDate.split('-'); displayDate = `${d}/${m}/${y}`; } 
+                if (r.shiftTime) { displayDate += displayDate ? ` / ${r.shiftTime}` : r.shiftTime; }
+                mainBody.push([globalSr, displayDate.trim() || '', r.operation || '', specification || '', finalObservation.trim(), r.fromTime || '', r.toTime || '', r.inspectionStatus || '', r.supervisorSign || '']);
                 globalSr++;
             });
-            
-            while (mainBody.length < requiredLength) {
-                mainBody.push([globalSr++, '', '', '', '', '', '', '', '']); 
-            }
-            
-            pdf.autoTable({
-                startY: yOffset,
-                head: [mainHeader],
-                body: mainBody,
-                theme: 'grid',
-                styles: { 
-                    fontSize: 6.5, 
-                    cellPadding: 0.8, 
-                    lineColor: 0, 
-                    lineWidth: 0.2, 
-                    valign: 'middle', 
-                    minCellHeight: 18.0 
-                },
-                headStyles: { 
-                    fillColor: [200, 200, 200], 
-                    fontStyle: 'bold', 
-                    valign: 'middle', 
-                    lineWidth: 0.2, 
-                    lineColor: 0,
-                    fontSize: 6.5 
-                },
-                columnStyles: {
-                    0: { cellWidth: 8, halign: 'center' }, 
-                    1: { cellWidth: 15 }, 
-                    2: { cellWidth: 18 }, 
-                    3: { cellWidth: 45 }, 
-                    4: { cellWidth: 32 }, 
-                    5: { cellWidth: 12, halign: 'center' }, 
-                    6: { cellWidth: 12, halign: 'center' }, 
-                    7: { cellWidth: 15, halign: 'center' }, 
-                    8: { cellWidth: 33 } 
-                },
-                didParseCell: (data) => {
-                    if (data.section === 'body' && data.row.index === 0) {
-                         data.cell.styles.minCellHeight = 5.0; 
-                    } else if (data.section === 'body') {
-                         data.cell.styles.minCellHeight = 18.0; 
-                    }
-                    
-                    if (data.section === 'body' && data.column.dataKey === 4 && data.cell.text.length > 1) {
-                        data.cell.styles.fontSize = 5.5; 
-                    }
-                },
-                didDrawPage: (data) => { yOffset = data.cursor.y + 3; }
-            });
-            
-            // --- Footer ---
+            while (mainBody.length < requiredLength) { mainBody.push([globalSr++, '', '', '', '', '', '', '', '']); }
+            pdf.autoTable({ startY: yOffset, head: [mainHeader], body: mainBody, theme: 'grid', styles: { fontSize: 6.5, cellPadding: 0.8, lineColor: 0, lineWidth: 0.2, valign: 'middle', minCellHeight: 18.0 }, headStyles: { fillColor: [200, 200, 200], fontStyle: 'bold', valign: 'middle', lineWidth: 0.2, lineColor: 0, fontSize: 6.5 }, columnStyles: { 0: { cellWidth: 8, halign: 'center' }, 1: { cellWidth: 15 }, 2: { cellWidth: 18 }, 3: { cellWidth: 45 }, 4: { cellWidth: 32 }, 5: { cellWidth: 12, halign: 'center' }, 6: { cellWidth: 12, halign: 'center' }, 7: { cellWidth: 15, halign: 'center' }, 8: { cellWidth: 33 } }, didParseCell: (data) => { if (data.section === 'body' && data.row.index === 0) { data.cell.styles.minCellHeight = 5.0; } else if (data.section === 'body') { data.cell.styles.minCellHeight = 18.0; } if (data.section === 'body' && data.column.dataKey === 4 && data.cell.text.length > 1) { data.cell.styles.fontSize = 5.5; } }, didDrawPage: (data) => { yOffset = data.cursor.y + 3; } });
             let footerY = Math.max(pdf.autoTable.previous.finalY + 3, availablePageEnd - 10);
-            
-            pdf.setFontSize(6.5); 
-            pdf.text(`Verified By: ${v('verifiedBy')}`, 10, footerY);
-            pdf.text(`Approved By: ${v('approvedBy')}`, 200, footerY, null, null, 'right');
-            footerY += 4;
-            pdf.text(`Note - ${v('notes')}`, 10, footerY);
-            
-            // Custom Filename Logic
-            const custNameClean = v('customerName').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
-            const partNoClean = v('partDesc').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 10);
-            const challanClean = v('challan').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 15);
-            
-            const fileName = `JobCard_${custNameClean}_${partNoClean}_${challanClean}.pdf`;
+            pdf.setFontSize(6.5); pdf.text(`Verified By: ${v('verifiedBy')}`, 10, footerY); pdf.text(`Approved By: ${v('approvedBy')}`, 200, footerY, null, null, 'right');
+            footerY += 4; pdf.text(`Note - ${v('notes')}`, 10, footerY);
+            const fileName = `JobCard_${v('customerName').substring(0, 15)}_${v('partDesc').substring(0, 10)}.pdf`;
             pdf.save(fileName);
-            
-        } catch (error) {
-            console.error("PDF Generation Error:", error);
-            alert(`❌ PDF Generation Error: ${error.message}. Please check the browser console.`);
-        }
+        } catch (error) { alert(`❌ PDF Error: ${error.message}`); }
     }
     
-    // --- Event Listeners (FINAL) ---
     document.getElementById('downloadPdfBtn').addEventListener('click', generatePdfWithAutoTable); 
-    document.getElementById('printBtn').addEventListener('click', () => {
-        applyPreview(); 
-        window.print();
-    });
-    
+    document.getElementById('printBtn').addEventListener('click', () => { applyPreview(); window.print(); });
     document.getElementById('applyBtn').addEventListener('click', applyPreview);
     document.getElementById('clearBtn').addEventListener('click', clearForm);
-    
-    // Call updateRowInputs and applyPreview on paint change
-    document.getElementById('paint').addEventListener('change', () => {
-        updateRowInputs(getFormData().rows); // Update the rows with new specs and inputs
-    });
-    
-    document.getElementById('updateOpsBtn').addEventListener('click', () => {
-        updateRowInputs(getFormData().rows); 
-    });
-
-
+    document.getElementById('paint').addEventListener('change', () => { updateRowInputs(getFormData().rows); });
+    document.getElementById('updateOpsBtn').addEventListener('click', () => { updateRowInputs(getFormData().rows); });
     document.getElementById('saveReport').addEventListener('click', handleSaveReport);
     document.getElementById('deleteReport').addEventListener('click', handleDeleteReport);
-    
     document.getElementById('homeViewBtn').addEventListener('click', () => showView('home'));
     document.getElementById('formViewBtn').addEventListener('click', () => showView('form'));
-    document.getElementById('newJobFromHome').addEventListener('click', () => {
-        clearForm();
-        showView('form');
-    });
+    document.getElementById('newJobFromHome').addEventListener('click', () => { clearForm(); showView('form'); });
     document.getElementById('completeReportBtn').addEventListener('click', handleCompleteReport); 
-    
-    document.getElementById('newReportBtn').addEventListener('click', () => {
-        clearForm();
-        showView('form');
-    });
-    
-    // Add listeners for new Qty fields
+    document.getElementById('newReportBtn').addEventListener('click', () => { clearForm(); showView('form'); });
     document.getElementById('orderQty').addEventListener('input', applyPreview);
     document.getElementById('orderQtyUnit').addEventListener('change', applyPreview);
-    
-    // NEW: Batch No validation listener
     document.getElementById('batchNo').addEventListener('input', handleBatchNoValidation);
-    
-    // NEW: Listeners for Base/Top Batch No. to control operation fields
     document.getElementById('baseBatch').addEventListener('input', handleOperationFieldDisabling);
     document.getElementById('topBatch').addEventListener('input', handleOperationFieldDisabling);
-    
-    // Set up initial state on load
-    document.addEventListener('DOMContentLoaded', () => {
-        // Initialize the two signature selectors once DOM is ready
-        initSignatureSelectors(); 
-        clearForm(); 
-    });
+    document.addEventListener('DOMContentLoaded', () => { initSignatureSelectors(); clearForm(); });
   </script>
 </body>
 </html>
