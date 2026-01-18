@@ -77,29 +77,8 @@
             window.handleBatchNoValidation();
         };
 
-        window.handleAuthAction = async (actionType) => {
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            if (actionType !== 'logout' && (!email || !password)) {
-                alert("Please enter email and password.");
-                return;
-            }
-
-            try {
-                if (actionType === 'signup') {
-                    await createUserWithEmailAndPassword(window.auth, email, password);
-                    alert(`✅ Signed Up and Logged In as ${email}. Full access enabled.`);
-                } else if (actionType === 'signin') {
-                    await signInWithEmailAndPassword(window.auth, email, password);
-                    alert(`✅ Signed In as ${email}.`);
-                } else if (actionType === 'logout') {
-                    await signOut(window.auth);
-                    alert("👋 Logged Out successfully!");
-                }
-            } catch (error) {
-                alert(`❌ Auth Failed: ${error.message}`);
-            }
-        }
+       
+          
 
         window.updateAuthUI = async (user) => {
             const loggedOutUI = document.getElementById('loggedOutUI');
@@ -107,29 +86,7 @@
             const authStatus = document.getElementById('authStatus');
             const userEmailDisplay = document.getElementById('userEmailDisplay');
             
-            if (user) {
-                loggedOutUI.style.display = 'none';
-                loggedInUI.style.display = 'flex';
-                currentUserRole = 'admin'; 
-                userEmailDisplay.textContent = `User: ${user.email} | Role: FULL ACCESS`;
-                authStatus.textContent = `Status: Logged In (Cloud Active)`;
-                authStatus.style.color = '#059669';
-                showView('home');
-            } else {
-                loggedOutUI.style.display = 'flex';
-                loggedInUI.style.display = 'none';
-                authStatus.textContent = "Status: Logged Out (Cloud Disabled)";
-                authStatus.style.color = '#dc2626';
-                currentUserRole = 'logged_out';
-            }
-            
-            const activeData = currentActiveReportId ? getFormData() : null;
-            window.updateActionButtons(activeData);
-        };
-
-        onAuthStateChanged(window.auth, (user) => {
-            window.updateAuthUI(user);
-        });
+         
         
         window.cloudSaveReport = async (data, docId) => {
             if (!window.auth.currentUser) throw new Error("User not logged in.");
